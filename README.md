@@ -363,3 +363,4 @@ Besides the standard Laravel settings, `.env` has:
 5. M-Pesa payments (STK push and C2B callbacks)
 6. React + TypeScript admin and tenant portals
 # RentLara
+# RentLara
