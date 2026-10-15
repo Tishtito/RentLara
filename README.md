@@ -365,3 +365,4 @@ Besides the standard Laravel settings, `.env` has:
 # RentLara
 # RentLara
 # RentLara
+# RentLara
