@@ -364,3 +364,4 @@ Besides the standard Laravel settings, `.env` has:
 6. React + TypeScript admin and tenant portals
 # RentLara
 # RentLara
+# RentLara
