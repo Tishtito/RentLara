@@ -34,6 +34,8 @@ class SetCurrentAccount
                 abort_unless(Account::query()->whereKey((int) $accountId)->exists(), 404, 'Account not found.');
                 $this->context->set((int) $accountId);
             } else {
+                // No account: see everything. Clear any id left from an earlier request (tests, Octane).
+                $this->context->set(null);
                 $this->context->bypass();
             }
 

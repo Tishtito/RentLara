@@ -55,6 +55,28 @@ return [
     'url' => env('APP_URL', 'http://localhost'),
 
     /*
+     * Where the React tenant portal runs: invitation emails link to {portal_url}/invite/{token}.
+     */
+    'portal_url' => env('PORTAL_URL', 'http://localhost:5174'),
+
+    /*
+     * Where the React admin portal runs: team invitations and password resets link to {admin_url}/set-password.
+     */
+    'admin_url' => env('ADMIN_URL', 'http://localhost:5173'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | API Documentation
+    |--------------------------------------------------------------------------
+    |
+    | Interactive API reference (Scalar at /docs, OpenAPI at /docs/api.json).
+    | Always available in local; elsewhere only when this is true.
+    |
+    */
+
+    'api_docs' => (bool) env('API_DOCS_ENABLED', in_array(env('APP_ENV'), ['local', 'staging', 'testing'], true)),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------

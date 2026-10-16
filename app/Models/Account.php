@@ -16,14 +16,14 @@ class Account extends Model
 
     protected $fillable = [
         'name', 'slug', 'email', 'phone', 'currency', 'timezone',
-        'invoice_prefix', 'billing_cycle_days', 'payment_due_days', 'status', 'settings',
+        'invoice_prefix', 'billing_day', 'payment_due_days', 'status', 'settings',
     ];
 
     protected function casts(): array
     {
         return [
             'settings' => 'array',
-            'billing_cycle_days' => 'integer',
+            'billing_day' => 'integer',
             'payment_due_days' => 'integer',
         ];
     }
@@ -61,11 +61,5 @@ class Account extends Model
     public function isActive(): bool
     {
         return $this->status === 'active';
-    }
-
-    /** Default channels for tenants who haven't set their own preference. */
-    public function defaultNotificationChannels(): array
-    {
-        return $this->settings['notification_channels'] ?? ['sms', 'email'];
     }
 }

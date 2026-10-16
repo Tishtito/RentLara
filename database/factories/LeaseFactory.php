@@ -6,6 +6,7 @@ use App\Models\Lease;
 use App\Models\Tenant;
 use App\Models\Unit;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Carbon;
 
 /**
  * @extends Factory<Lease>
@@ -23,6 +24,8 @@ class LeaseFactory extends Factory
                 ->state(['account_id' => $attributes['account_id']]),
             'start_date' => now()->subMonth()->toDateString(),
             'monthly_rent' => '15000.00',
+            // First bill one 30-day cycle after move-in (LeaseService::create does the same).
+            'next_billing_date' => fn (array $attributes) => Carbon::parse($attributes['start_date'])->addDays(30)->toDateString(),
         ];
     }
 }

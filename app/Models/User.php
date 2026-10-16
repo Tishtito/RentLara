@@ -10,9 +10,11 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use Spatie\Permission\Traits\HasRoles;
 
 /**
- * Admin-portal login: super admin, landlord or caretaker.
+ * Admin-portal login: a super admin (platform, no account) or staff of a landlord account. What staff
+ * may do comes from their roles in that account (Spatie roles, teams = accounts; see App\Enums\Permission).
  *
  * Deliberately NOT using BelongsToAccount: the auth guard must load the user
  * before any account context exists, and super admins have no account at all.
@@ -22,7 +24,7 @@ use Laravel\Sanctum\HasApiTokens;
  */
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, Notifiable, SoftDeletes;
+    use HasApiTokens, HasFactory, HasRoles, Notifiable, SoftDeletes;
 
     protected $fillable = [
         'account_id', 'role', 'name', 'email', 'phone', 'password', 'status',
@@ -54,16 +56,6 @@ class User extends Authenticatable
     public function isSuperAdmin(): bool
     {
         return $this->role === UserRole::SuperAdmin;
-    }
-
-    public function isLandlord(): bool
-    {
-        return $this->role === UserRole::Landlord;
-    }
-
-    public function isCaretaker(): bool
-    {
-        return $this->role === UserRole::Caretaker;
     }
 
     public function isActive(): bool

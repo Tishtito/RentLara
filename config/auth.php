@@ -113,6 +113,14 @@ return [
             'expire' => 60,
             'throttle' => 60,
         ],
+
+        // Admin team invitations: same table, but the "set your password" link lasts 3 days.
+        'staff_invites' => [
+            'provider' => 'users',
+            'table' => env('AUTH_PASSWORD_RESET_TOKEN_TABLE', 'password_reset_tokens'),
+            'expire' => 60 * 72,
+            'throttle' => 0,
+        ],
     ],
 
     /*

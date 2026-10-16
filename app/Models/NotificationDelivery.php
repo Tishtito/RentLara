@@ -4,7 +4,6 @@ namespace App\Models;
 
 use App\Enums\NotificationChannel;
 use App\Models\Concerns\BelongsToAccount;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
@@ -39,36 +38,5 @@ class NotificationDelivery extends Model
     public function tenant(): BelongsTo
     {
         return $this->belongsTo(Tenant::class);
-    }
-
-    public function scopeFailed(Builder $query): Builder
-    {
-        return $query->where('status', 'failed');
-    }
-
-    public function markSent(string $provider, ?string $providerMessageId = null): void
-    {
-        $this->forceFill([
-            'status' => 'sent',
-            'provider' => $provider,
-            'provider_message_id' => $providerMessageId,
-            'attempts' => $this->attempts + 1,
-            'sent_at' => now(),
-            'error' => null,
-        ])->save();
-    }
-
-    public function markFailed(string $error): void
-    {
-        $this->forceFill([
-            'status' => 'failed',
-            'attempts' => $this->attempts + 1,
-            'error' => $error,
-        ])->save();
-    }
-
-    public function markDelivered(): void
-    {
-        $this->forceFill(['status' => 'delivered', 'delivered_at' => now()])->save();
     }
 }

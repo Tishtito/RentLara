@@ -8,7 +8,7 @@ Target database: MySQL 8 or PostgreSQL. All money is `decimal(12,2)` in the acco
 
 ```mermaid
 erDiagram
-    accounts ||--o{ users : "landlord & caretakers"
+    accounts ||--o{ users : "staff (owner, caretakers…)"
     accounts ||--o{ properties : owns
     accounts ||--o{ tenants : "has"
     properties ||--o{ units : contains
@@ -31,8 +31,10 @@ erDiagram
 
 | Table | Purpose |
 |---|---|
-| `accounts` | One landlord business — the multi-tenancy boundary. Holds cycle length (29 days), due-days, currency, channel settings. |
-| `users` | Admin portal logins. `role` = super_admin (no account) / landlord / caretaker. |
+| `accounts` | One landlord business — the multi-tenancy boundary. Holds cycle length (30 days by default), due-days, currency, channel settings. |
+| `invoices` (void) | `voided_at`, `voided_by`, `void_reason`; `billing_key` = `"{lease_id}:{period_start}"` is unique for live bills (null when void), so a voided period can be billed again. |
+| `users` | Admin portal logins. `role` = super_admin (no account) / staff; `status` = active / invited / suspended. |
+| `roles`, `permissions`, `model_has_roles`, `role_has_permissions` | Spatie. Roles with `account_id` NULL are built-in templates; others belong to one account. `model_has_roles.account_id` = the account the role applies in. |
 | `properties` | Buildings/plots a landlord owns. |
 | `units` | Houses inside a property (`7-7`), with asking rent and occupancy status. |
 | `charge_rates` | Landlord settings: electricity & water price per unit (metered), garbage fee (fixed), plus any extra charges. Versioned by date; optional per-unit override. |
@@ -57,23 +59,32 @@ erDiagram
 | Arrears 1,000 | `invoices.balance_brought_forward` |
 | Total 19,500 | `invoices.total_due` = current_charges 18,500 + arrears 1,000 |
 
-## Billing job (runs daily, bills leases whose cycle is due)
+## Billing (billing day + move-in bill)
 
-Running daily instead of on one fixed date lets each lease keep its own 29-day cycle from its move-in date.
+Rules: `app/Services/Billing/BillingCalendar.php` (decisions #5 and #6 in CLAUDE.md).
 
-1. For each active account, create a `billing_runs` row.
-2. Select `leases` where `status IN ('active','notice') AND next_billing_date <= today`.
-3. For each lease (in a DB transaction):
-   - Period = `last_billed_on + 1` (or `start_date`) → `next_billing_date - 1`.
-   - **Rent** line from `leases.monthly_rent`.
-   - **Metered** lines: for each active meter on the unit, take the latest reading ≤ period end and the previous reading (or `initial_reading`); quantity = difference; rate = the `charge_rates` row for that charge code effective at period end (unit override first, then property-wide). If a reading is missing, skip the lease and log it in `billing_runs.errors` so the caretaker can capture it.
-   - **Fixed** lines: every other effective fixed `charge_rates` row (garbage, security…).
+**Move-in bill** (`CreateMoveInInvoice`, made with the lease by `MoveInService`, `invoices.type = move_in`):
+deposit (once, `leases.deposit_invoiced_at`) + rent × days(move-in → next billing day) ÷ 30, rounded to the shilling,
+max one month (moving in on the billing day = a full month). Due on move-in day. Sets `next_billing_date` = first billing day.
+
+**Monthly bill** (`GenerateDueInvoices` daily 06:00 → `BillingRunRequested` per active account → `BillingService`):
+1. A `billing_runs` row per account.
+2. Leases where `status IN ('active','notice') AND next_billing_date <= today`.
+3. For each lease (in a DB transaction), `InvoiceBuilder`:
+   - Period = `next_billing_date` → day before the following billing day (rent in advance, e.g. 5 Nov – 4 Dec).
+   - **Rent** line from `leases.monthly_rent` ("Rent 5 Nov – 4 Dec").
+   - **Metered** lines: latest reading on or before the billing day vs the last billed reading (or the move-in reading,
+     or `initial_reading`); rate = the `charge_rates` row effective on the billing day (unit override first). A missing
+     reading skips the lease and logs it in `billing_runs.errors`; the next daily run retries it.
+   - **Fixed** lines: every other effective fixed `charge_rates` row (garbage, security…) for the coming month.
    - `balance_brought_forward` = lease balance (see Payments).
-   - Insert the invoice; the unique key `(lease_id, period_start)` makes a re-run harmless.
-   - Advance `last_billed_on` and `next_billing_date += accounts.billing_cycle_days`.
-4. Dispatch one queued notification per channel the tenant has enabled; each creates a `notification_deliveries` row.
+   - `billing_key` = `"{lease}:{period_start}"` (unique, null when void) makes a re-run harmless.
+   - `last_billed_on` = period end, `next_billing_date` = next billing day.
+4. `InvoiceIssued` → one `notification_deliveries` row per channel → queued send, retried on failure.
 
-In Laravel: `Schedule::job(new GenerateDueInvoices)->dailyAt('06:00')` with per-lease jobs on the queue.
+New columns: `accounts.billing_day`, `invoices.type` (move_in | monthly | adjustment), `leases.deposit_invoiced_at`,
+`leases.onboarded_on` (tenants already living there when the landlord joined: their first bill counts usage from the
+reading taken that day; no move-in bill).
 
 ## Payments and arrears
 

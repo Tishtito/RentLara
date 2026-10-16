@@ -21,7 +21,7 @@ return new class extends Migration
             $table->string('currency', 3)->default('KES');
             $table->string('timezone')->default('Africa/Nairobi');
             $table->string('invoice_prefix', 10)->default('INV');
-            $table->unsignedSmallInteger('billing_cycle_days')->default(29); // monthly cycle length
+            $table->unsignedSmallInteger('billing_cycle_days')->default(30); // days per billing cycle
             $table->unsignedSmallInteger('payment_due_days')->default(5);   // due date = issue date + N
             $table->enum('status', ['active', 'suspended', 'closed'])->default('active');
             $table->json('settings')->nullable();         // SMS / WhatsApp sender IDs, branding, etc.

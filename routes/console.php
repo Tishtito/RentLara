@@ -1,8 +1,8 @@
 <?php
 
-use Illuminate\Foundation\Inspiring;
-use Illuminate\Support\Facades\Artisan;
+use App\Jobs\GenerateDueInvoices;
+use Illuminate\Support\Facades\Schedule;
 
-Artisan::command('inspire', function () {
-    $this->comment(Inspiring::quote());
-})->purpose('Display an inspiring quote');
+// Bill every landlord's due leases each morning (Nairobi time): one queued billing run per account.
+// `php artisan billing:run` does the same by hand.
+Schedule::job(new GenerateDueInvoices)->dailyAt('06:00')->timezone('Africa/Nairobi');

@@ -35,4 +35,12 @@ return [
         ],
     ],
 
+    /*
+     * "Continue with Google" (admin + tenant portals, web and apps). The apps' native Google sign-in
+     * is configured with the web client ID, so one ID is normally enough; list more if needed.
+     */
+    'google' => [
+        'client_ids' => array_values(array_filter(array_map('trim', explode(',', (string) env('GOOGLE_CLIENT_IDS', ''))))),
+    ],
+
 ];

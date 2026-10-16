@@ -35,22 +35,4 @@ class BillingRun extends Model
     {
         return $this->belongsTo(User::class, 'triggered_by');
     }
-
-    /** Record a lease the job could not bill, e.g. a missing water reading. */
-    public function recordSkip(Lease $lease, string $reason): void
-    {
-        $errors = $this->errors ?? [];
-        $errors[] = ['lease_id' => $lease->id, 'unit_id' => $lease->unit_id, 'reason' => $reason];
-
-        $this->errors = $errors;
-        $this->leases_skipped++;
-        $this->save();
-    }
-
-    public function finish(): void
-    {
-        $this->status = $this->leases_skipped > 0 ? 'completed_with_errors' : 'completed';
-        $this->finished_at = now();
-        $this->save();
-    }
 }
