@@ -20,6 +20,7 @@ use Dedoc\Scramble\Support\Generator\Types\IntegerType;
 use Dedoc\Scramble\Support\RouteInfo;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
@@ -59,6 +60,11 @@ class AppServiceProvider extends ServiceProvider
 
         // Activity log: every accepted intent event (runs after the event's own listener).
         Event::listen('App\\Events\\Commands\\*', [RecordAuditEntry::class, 'handle']);
+
+        // Behind Cloudflare's proxy (or another reverse proxy): trust its forwarded headers (config/app.php).
+        if ($proxies = config('app.trusted_proxies')) {
+            TrustProxies::at($proxies === '*' ? '*' : array_map('trim', explode(',', $proxies)));
+        }
 
         // Super admins pass every policy check.
         Gate::before(fn (User $user) => $user->isSuperAdmin() ? true : null);

@@ -58,7 +58,7 @@ class WhatsAppBillTest extends TestCase
             return $r['to'] === '254712345678'
                 && $r['type'] === 'template'
                 && $r['template']['name'] === 'rentflow_bill_issued'
-                && $r['template']['language'] === ['code' => 'en']
+                && $r['template']['language'] === ['code' => 'en_US']
                 && $header['parameters'][0]['document'] === ['id' => 'media-123', 'filename' => 'INV-2026-000001.pdf']
                 && array_column($body['parameters'], 'text') === [
                     'Jane', 'Kims Properties', '7-7', '5 Nov – 4 Dec 2026', 'KES 19,500.00', '10 Nov 2026', 'INV-2026-000001',

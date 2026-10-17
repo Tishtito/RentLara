@@ -24,7 +24,7 @@ class WhatsAppConnectionFactory extends Factory
             'display_phone_number' => '+254 700 000001',
             'verified_name' => 'Kims Properties',
             'template_name' => 'rentflow_bill_issued',
-            'template_language' => 'en',
+            'template_language' => 'en_US',
             'status' => 'active',
             'verified_at' => now(),
         ];

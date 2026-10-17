@@ -150,3 +150,10 @@ Move-in (and "Resend invitation") emails the tenant a one-time link `{PORTAL_URL
 Set `PORTAL_URL` to where the tenant portal runs (default `http://localhost:5174`). The email is sent by a queued
 listener (`SendTenantInvitation`), so a queue worker must run (`php artisan queue:work`), the same as for bill emails.
 In dev with `MAIL_MAILER=log` the email, including the link, is written to `storage/logs/laravel.log`.
+
+## Production
+
+Hosting files and the runbook live in `../deploy/` (`deploy/README.md`): Cloudflare DNS script, nginx sites for
+`api.` / `admin.` / the tenant host, systemd queue worker, scheduler cron, `deploy.sh`. Production settings:
+`.env.production.example` (Sanctum stateful domains = the two web hosts, `SESSION_SECURE_COOKIE=true`,
+`TRUSTED_PROXIES` for when Cloudflare proxies the records).

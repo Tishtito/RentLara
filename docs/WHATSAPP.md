@@ -44,7 +44,7 @@ Business-initiated WhatsApp messages must use a template approved by Meta.
 |---|---|
 | Category | **Utility** |
 | Name | `rentflow_bill_issued` |
-| Language | **English** (`en`) |
+| Language | **English (US)** (`en_US`). Meta treats `en` and `en_US` as different translations, so this must match `template_language` |
 | Header | **Document** (upload any sample PDF, e.g. a past bill) |
 | Body | `Hello {{1}}, your bill from {{2}} for house {{3}} ({{4}}) is ready. Total due: {{5}}, payable by {{6}}. Invoice number: {{7}}. The bill is attached.` |
 | Footer | `Sent via Rentflow` |
@@ -126,7 +126,7 @@ The reason is stored in `notification_deliveries.error`, e.g. `WhatsApp error 13
 |---|---|---|
 | `WHATSAPP_API_VERSION` | `v23.0` | Graph API version — use the latest your Meta app shows |
 | `WHATSAPP_BILL_TEMPLATE` | `rentflow_bill_issued` | Default template for new connections |
-| `WHATSAPP_BILL_TEMPLATE_LANGUAGE` | `en` | |
+| `WHATSAPP_BILL_TEMPLATE_LANGUAGE` | `en_US` | |
 | `WHATSAPP_TIMEOUT` | `20` | Seconds to wait for Meta |
 
 Per-landlord credentials are in the `whatsapp_connections` table (token and app secret encrypted with

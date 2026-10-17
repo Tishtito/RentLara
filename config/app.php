@@ -65,6 +65,12 @@ return [
     'admin_url' => env('ADMIN_URL', 'http://localhost:5173'),
 
     /*
+     * Reverse proxies in front of nginx whose X-Forwarded-* headers are trusted (so Laravel sees https and
+     * the visitor's IP): "*" behind Cloudflare's proxy, or a comma-separated list of IPs. Empty = none.
+     */
+    'trusted_proxies' => env('TRUSTED_PROXIES'),
+
+    /*
     |--------------------------------------------------------------------------
     | API Documentation
     |--------------------------------------------------------------------------

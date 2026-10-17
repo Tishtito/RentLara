@@ -24,7 +24,7 @@ return [
     // The approved message template used for bills (each landlord creates it in WhatsApp Manager).
     'bill_template' => [
         'name' => env('WHATSAPP_BILL_TEMPLATE', 'rentflow_bill_issued'),
-        'language' => env('WHATSAPP_BILL_TEMPLATE_LANGUAGE', 'en'),
+        'language' => env('WHATSAPP_BILL_TEMPLATE_LANGUAGE', 'en_US'),
     ],
 
 ];
