@@ -1,0 +1,4 @@
+# Laravel scheduler: GenerateDueInvoices daily at 06:00 Nairobi (monthly bills on the billing day),
+# plus anything else in routes/console.php. Install for user tito:  crontab -u tito ~/rentflow/backend/deploy/server/rentflow-scheduler.cron
+# (or `crontab -e` and paste the line below).
+* * * * * cd /home/tito/rentflow/backend && /usr/bin/php8.4 artisan schedule:run >> /dev/null 2>&1

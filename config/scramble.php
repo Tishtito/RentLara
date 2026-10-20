@@ -2,7 +2,6 @@
 
 use Dedoc\Scramble\Http\Middleware\RestrictedDocsAccess;
 use Dedoc\Scramble\SecurityDocumentation\MiddlewareAuthSecurityStrategy;
-use Dedoc\Scramble\Support\Generator\SecurityScheme;
 
 return [
     /*
@@ -183,12 +182,10 @@ return [
      *     ],
      * ],
      */
-    // Routes behind auth:sanctum need a bearer token; the rest (token login) are marked public.
+    // Routes behind auth:sanctum need a bearer token (the strategy's default scheme); the rest (token login)
+    // are marked public. No objects here: `php artisan config:cache` can't serialize them.
     'security_strategy' => [
         MiddlewareAuthSecurityStrategy::class,
-        [
-            'middleware' => ['auth:sanctum'],
-            'scheme' => SecurityScheme::http('bearer'),
-        ],
+        ['middleware' => ['auth:sanctum']],
     ],
 ];

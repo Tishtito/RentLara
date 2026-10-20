@@ -153,7 +153,8 @@ In dev with `MAIL_MAILER=log` the email, including the link, is written to `stor
 
 ## Production
 
-Hosting files and the runbook live in `../deploy/` (`deploy/README.md`): Cloudflare DNS script, nginx sites for
-`api.` / `admin.` / the tenant host, systemd queue worker, scheduler cron, `deploy.sh`. Production settings:
+Hosting files and the runbook live in `deploy/` (`deploy/README.md`): Cloudflare DNS script, the nginx `api.` site +
+snippets shared with the web-app sites, systemd queue worker, scheduler cron, `deploy.sh`. The `admin.` / tenant sites
+and their build + upload script are in the frontend repo's `deploy/`. Production settings:
 `.env.production.example` (Sanctum stateful domains = the two web hosts, `SESSION_SECURE_COOKIE=true`,
 `TRUSTED_PROXIES` for when Cloudflare proxies the records).

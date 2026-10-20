@@ -1,0 +1,21 @@
+# Rentflow queue worker: bill emails + PDFs, WhatsApp messages, invitations, billing runs.
+#   sudo cp ~/rentflow/backend/deploy/server/rentflow-queue.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now rentflow-queue
+#   journalctl -u rentflow-queue -f
+# deploy.sh runs `php artisan queue:restart` after each deploy: the worker finishes its job, exits, and
+# systemd starts it again on the new code (no sudo needed).
+[Unit]
+Description=Rentflow queue worker
+After=network.target mysql.service
+
+[Service]
+User=tito
+Group=www-data
+UMask=0002
+WorkingDirectory=/home/tito/rentflow/backend
+ExecStart=/usr/bin/php8.4 artisan queue:work --sleep=3 --tries=3 --max-time=3600 --memory=512
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
