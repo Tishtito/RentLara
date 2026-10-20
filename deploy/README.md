@@ -49,6 +49,22 @@ Commands below run from the backend repo root unless noted.
 The backend script runs `composer install --no-dev`, `migrate --force`, `permissions:sync`, rebuilds the caches, and
 restarts the queue worker gracefully (`queue:restart`). The server's `backend/.env` and `backend/storage/` are never touched.
 
+## CI/CD (GitHub Actions, branch `dev`)
+
+`.github/workflows/dev.yml`: a pull request into `dev` runs the checks (Pint + `php artisan test`); a merge (push) into `dev` runs
+them again and, only if they pass, runs `./deploy/deploy.sh` from GitHub, then checks `https://api.rentflow.codepasstech.top/up`. Deploys queue one at a time.
+
+Repo settings → Secrets and variables → Actions (environment `dev` or repository):
+
+| Name | Kind | Value |
+|---|---|---|
+| `DEPLOY_SSH_KEY` | secret | private key of the CI-only key `rentflow-ci` (its `.pub` is in the server's `~tito/.ssh/authorized_keys`) |
+| `DEPLOY_KNOWN_HOSTS` | secret | `ssh-keyscan 102.212.246.251` output (checked against a known-good `known_hosts`) |
+
+Rotate the key: make a new one (`ssh-keygen -t ed25519 -N '' -C rentflow-ci -f rentflow-ci`), add the `.pub` to
+`authorized_keys`, update `DEPLOY_SSH_KEY` in **both** repos, then remove the old line from `authorized_keys`.
+`./deploy/deploy.sh` from a laptop still works for a manual deploy.
+
 ## Later: Cloudflare proxy (orange cloud)
 
 `PROXIED=true ./deploy/cloudflare/dns.sh`, SSL/TLS mode **Full (strict)**, and `TRUSTED_PROXIES=*` in the

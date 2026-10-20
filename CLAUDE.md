@@ -165,6 +165,9 @@ rent 20 Oct – 4 Nov (16 of 30 days) 8,000 = **23,000**.
   registered in `AppServiceProvider`) records every ACCEPTED intent (it runs after the event's own listener, so a 422 isn't
   logged) with actor, account, `via_platform`, subject and the payload with any `password|token|secret` key redacted;
   `RecordAuthEntry` logs logins/logouts/app tokens. New intents get a readable summary in `AuditLogService::SUMMARIES`.
+- **CI/CD:** `.github/workflows/dev.yml` (here and in `../frontend`): PRs into `dev` run Pint + tests; a merge into `dev`
+  deploys with `deploy/deploy.sh` (secrets `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`; `deploy/README.md`). Server PHP is 8.4
+  (`php8.4`; `/usr/bin/php` there is 8.3).
 
 ## Next steps (in order)
 
