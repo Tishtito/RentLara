@@ -165,6 +165,10 @@ rent 20 Oct – 4 Nov (16 of 30 days) 8,000 = **23,000**.
   registered in `AppServiceProvider`) records every ACCEPTED intent (it runs after the event's own listener, so a 422 isn't
   logged) with actor, account, `via_platform`, subject and the payload with any `password|token|secret` key redacted;
   `RecordAuthEntry` logs logins/logouts/app tokens. New intents get a readable summary in `AuditLogService::SUMMARIES`.
+- **Tenant portal (after login):** `GET portal/home` (each current lease, or the last after moving out: balance, latest bill
+  with lines; last 5 payments), `GET portal/invoices[/{id}[/pdf]]`, `GET portal/payments`. All reads through
+  `Services\Portal\TenantStatement`, always `tenant_id` = the logged-in tenant (another tenant's bill → 404); draft/void
+  bills and unconfirmed payments are never shown; payments use `TenantPaymentResource` (no landlord notes).
 - **CI/CD:** `.github/workflows/dev.yml` (here and in `../frontend`): PRs into `dev` run Pint + tests; a merge into `dev`
   deploys with `deploy/deploy.sh` (secret `DEPLOY_SSH_KEY`, host key in `deploy/known_hosts`; `deploy/README.md`). Server PHP is 8.4
   (`php8.4`; `/usr/bin/php` there is 8.3).
@@ -175,7 +179,7 @@ rent 20 Oct – 4 Nov (16 of 30 days) 8,000 = **23,000**.
    by SMS/WhatsApp too (email is done).
 2. **Admin API gaps** — bills list + void, reading photos.
 3. **SPA auth extras** — tenant password reset (admin reset is done).
-4. **Tenant portal API** — bills, payments (login with landlord choice and accepting invitations are done).
+4. **Tenant portal extras** — tenant password reset / change password, profile edit (bills, payments and home are done).
 5. **M-Pesa** — STK push / C2B callbacks dispatching `PaymentSubmitted`.
 6. Frontend screens for each new API (`../frontend`, designed screens show "Coming soon" until wired).
 
