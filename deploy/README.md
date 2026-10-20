@@ -54,12 +54,12 @@ restarts the queue worker gracefully (`queue:restart`). The server's `backend/.e
 `.github/workflows/dev.yml`: a pull request into `dev` runs the checks (Pint + `php artisan test`); a merge (push) into `dev` runs
 them again and, only if they pass, runs `./deploy/deploy.sh` from GitHub, then checks `https://api.rentflow.codepasstech.top/up`. Deploys queue one at a time.
 
-Repo settings → Secrets and variables → Actions (environment `dev` or repository):
+Repo settings → Environments → `dev` (or repository secrets). The server's host key is committed in `deploy/known_hosts`
+(update it if the server is rebuilt: `ssh-keyscan 102.212.246.251`, compared with a trusted `known_hosts`).
 
 | Name | Kind | Value |
 |---|---|---|
 | `DEPLOY_SSH_KEY` | secret | private key of the CI-only key `rentflow-ci` (its `.pub` is in the server's `~tito/.ssh/authorized_keys`) |
-| `DEPLOY_KNOWN_HOSTS` | secret | `ssh-keyscan 102.212.246.251` output (checked against a known-good `known_hosts`) |
 
 Rotate the key: make a new one (`ssh-keygen -t ed25519 -N '' -C rentflow-ci -f rentflow-ci`), add the `.pub` to
 `authorized_keys`, update `DEPLOY_SSH_KEY` in **both** repos, then remove the old line from `authorized_keys`.
