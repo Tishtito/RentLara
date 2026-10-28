@@ -20,6 +20,10 @@ class PropertyResource extends JsonResource
             'county' => $this->county,
             'status' => $this->status,
             'notes' => $this->notes,
+            /** This property's own billing day (1–28), or null = the account's. */
+            'billing_day' => $this->billing_day,
+            /** The day its units bill on unless they have their own: billing_day ?? the account's. */
+            'effective_billing_day' => $this->whenHas('effective_billing_day'),
             'caretaker' => $this->whenLoaded('caretaker', fn () => $this->caretaker ? [
                 'id' => $this->caretaker->id,
                 'name' => $this->caretaker->name,

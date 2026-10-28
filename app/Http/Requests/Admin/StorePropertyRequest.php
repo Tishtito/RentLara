@@ -48,7 +48,20 @@ class StorePropertyRequest extends FormRequest
             }],
             'status' => ['sometimes', 'in:active,inactive'],
             'notes' => ['nullable', 'string', 'max:2000'],
+            /**
+             * Day of the month (1–28) this property's units bill on; null = the account's billing day. Units can
+             * have their own. Changing it moves running leases to the first new billing day on or after their
+             * next bill, and that bill also charges the days in between.
+             *
+             * @example 20
+             */
+            'billing_day' => ['nullable', 'integer', 'between:1,28'],
         ];
+    }
+
+    public function messages(): array
+    {
+        return ['billing_day.between' => 'Choose a day from 1 to 28 (it must exist in every month).'];
     }
 
     /**
@@ -70,6 +83,7 @@ class StorePropertyRequest extends FormRequest
             status: $keep('status', $property?->status) ?? 'active',
             notes: $keep('notes', $property?->notes),
             propertyId: $property?->id,
+            billingDay: ($day = $keep('billing_day', $property?->billing_day)) === null || $day === '' ? null : (int) $day,
         );
     }
 }

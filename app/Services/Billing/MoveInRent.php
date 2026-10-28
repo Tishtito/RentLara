@@ -4,7 +4,7 @@ namespace App\Services\Billing;
 
 use DateTimeImmutable;
 
-/** Result of BillingCalendar::moveInRent(). Money in integer cents. */
+/** Prorated rent: BillingCalendar::moveInRent() or ::gapRent(). Money in integer cents. */
 final class MoveInRent
 {
     public function __construct(

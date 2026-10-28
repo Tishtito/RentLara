@@ -15,6 +15,8 @@ final readonly class PropertyData
         public string $status = 'active',
         public ?string $notes = null,
         public ?int $propertyId = null,
+        /** 1–28, or null = the account's billing day. */
+        public ?int $billingDay = null,
     ) {}
 
     /** @return array<string, mixed> */
@@ -29,6 +31,7 @@ final readonly class PropertyData
             'caretaker_id' => $this->caretakerId,
             'status' => $this->status,
             'notes' => $this->notes,
+            'billing_day' => $this->billingDay,
         ];
     }
 }

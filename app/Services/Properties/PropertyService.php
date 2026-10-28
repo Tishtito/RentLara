@@ -9,10 +9,12 @@ use App\Enums\UserRole;
 use App\Models\Lease;
 use App\Models\Property;
 use App\Models\User;
+use App\Services\Leases\LeaseService;
 use App\Services\Ledger\LeaseLedgerService;
 use App\Support\CurrentAccount;
 use App\Support\Money;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /** Landlords' properties (buildings / plots). Units, meters and rates hang off a property. */
@@ -21,6 +23,7 @@ class PropertyService
     public function __construct(
         private Visibility $visibility,
         private LeaseLedgerService $ledger,
+        private LeaseService $leases,
     ) {}
 
     /**
@@ -41,6 +44,11 @@ class PropertyService
             ->get();
 
         $this->attachArrears($properties);
+
+        $accountDay = $this->leases->billingDayFor((int) app(CurrentAccount::class)->id());
+        foreach ($properties as $property) {
+            $property->setAttribute('effective_billing_day', $property->billing_day ?? $accountDay);
+        }
 
         return $properties;
     }
@@ -75,9 +83,20 @@ class PropertyService
             throw ValidationException::withMessages(['name' => 'You already have a property with this name.']);
         }
 
-        $property->fill($data->attributes())->save();
+        return DB::transaction(function () use ($property, $data) {
+            $dayChanged = $property->exists && $property->billing_day !== $data->billingDay;
+            $property->fill($data->attributes())->save();
 
-        return $property;
+            if ($dayChanged) {
+                // Units with their own billing day keep it (reschedule resolves each lease's day again).
+                $this->leases->reschedule(Lease::query()
+                    ->whereIn('status', LeaseStatus::billable())
+                    ->whereHas('unit', fn ($q) => $q->where('property_id', $property->id)->whereNull('billing_day'))
+                    ->get());
+            }
+
+            return $property;
+        });
     }
 
     /** arrears_total = sum of positive balances of the billable leases in each property. */
