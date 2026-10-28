@@ -48,6 +48,8 @@ class UnitController extends Controller
      * Edit a unit.
      *
      * Rent here is only the asking rent for the next move-in; a running lease keeps its own rent.
+     * `utilities` switches a metered utility between the meter and a fixed monthly amount from the
+     * tenant's next bill (today when vacant).
      */
     public function update(StoreUnitRequest $request, Unit $unit): JsonResponse
     {

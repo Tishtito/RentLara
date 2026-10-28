@@ -1,12 +1,22 @@
-# WhatsApp bills (Meta WhatsApp Cloud API)
+# WhatsApp bills and invitations (Meta WhatsApp Cloud API)
 
-Every landlord sends bills from **their own WhatsApp Business number**, through their own Meta app.
-Once connected, each new bill goes to the tenant on WhatsApp — a message with the PDF bill attached —
-as well as by email. Landlords who haven't connected WhatsApp keep sending email only.
+Every landlord sends messages from **their own WhatsApp Business number**, through their own Meta app.
+Once connected, the tenant gets on WhatsApp as well as by email:
+
+- each new **bill** — a message with the PDF bill attached (template `rentflow_bill_issued`);
+- each **invitation** to the tenant portal — "set up your login, get the app" with a button that opens
+  the one-time set-password link (template `rentflow_tenant_invitation`);
+- each **confirmed payment** — a receipt with the receipt PDF attached (template `rentflow_payment_receipt`).
+
+Landlords who haven't connected WhatsApp keep sending email only.
 
 ```
 billing:run → InvoiceIssued → one delivery per channel (email, whatsapp)
   whatsapp: upload bill PDF to Meta → send template "rentflow_bill_issued" with the PDF as header
+invitation (move-in / resend) → TenantInvitationIssued → email + one whatsapp delivery
+  whatsapp: send template "rentflow_tenant_invitation", button URL ends in the invitation token
+payment confirmed → PaymentRecorded → one delivery per channel (email, whatsapp)
+  whatsapp: upload receipt PDF → send template "rentflow_payment_receipt" with the PDF as header
   Meta → POST /api/webhooks/whatsapp/{landlord-slug} → delivery becomes delivered / failed
 ```
 
@@ -56,6 +66,49 @@ Rentflow fills the variables in exactly this order. Approval usually takes minut
 A different name or language can be set when connecting (`template_name`, `template_language`), but
 the variables must stay in this order.
 
+## 3b. Create the tenant invitation template
+
+Same place, a second template:
+
+| Field | Value |
+|---|---|
+| Category | **Utility** |
+| Name | `rentflow_tenant_invitation` |
+| Language | the same as the bill template (`template_language`) |
+| Header | none (or Text: `Your Rentflow login`) |
+| Body | `Hello {{1}}, {{2}} has set up your Rentflow tenant account for {{3}}. Tap the button below to choose your password, then log in to see your bills, balance and payments any time. Get the app: {{4}}. The link expires in 3 days.` |
+| Footer | `Sent via Rentflow` |
+| Button | **Visit website** · text `Set up my login` · URL type **Dynamic** · `https://<portal-domain>/invite/{{1}}` (your `PORTAL_URL`) |
+
+Sample values: `Jane` · `Kims Properties` · `House 7-7, Kims Apartments` ·
+`Android: https://play.google.com/store/apps/details?id=…` · button suffix `abc123`.
+
+`{{4}}` comes from `TENANT_APP_ANDROID_URL` / `TENANT_APP_IOS_URL` (`Android: … · iPhone: …`), or the
+portal URL while the apps aren't in the stores. A landlord can use another name with
+`invitation_template_name` when connecting. Keep "download the app" as part of the account message:
+Meta may re-categorise a template that reads like an advert as **Marketing** (paid differently).
+
+The invitation email is unchanged except that it also lists the app links. WhatsApp is an extra
+channel: inviting still needs the tenant's email.
+
+## 3c. Create the payment receipt template
+
+| Field | Value |
+|---|---|
+| Category | **Utility** |
+| Name | `rentflow_payment_receipt` |
+| Language | the same as the bill template (`template_language`) |
+| Header | **Document** (upload any sample PDF) |
+| Body | `Hello {{1}}, {{2}} has received your payment of {{3}} for {{4}} on {{5}} (reference {{6}}). Receipt number: {{7}}. {{8}}. The receipt is attached.` |
+| Footer | `Sent via Rentflow` |
+
+Sample values: `Jane` · `Kims Properties` · `KES 5,000.00` · `House 7-7, Kims Apartments` · `5 Nov 2026` ·
+`SJK1A2B3C4` · `RCT-2026-000001` · `Your balance is now KES 14,500.00`.
+
+`{{6}}` is the payment reference (M-Pesa code, bank ref), or the method ("Cash") when there is none.
+`{{8}}` is `Your balance is now KES …`, `You are KES … in credit` or `Your account is fully paid`.
+Another name can be set with `receipt_template_name` when connecting.
+
 ## 4. Connect it in Rentflow
 
 As the landlord (in the API docs at `/docs` → **WhatsApp → Connect a WhatsApp number**, or any client):
@@ -104,6 +157,8 @@ just won't see delivered / failed updates.
 
 ## Who gets WhatsApp
 
+Bills, receipts and invitations follow the same rules:
+
 - By default every tenant gets bills by **email and WhatsApp** (landlords can change the default in
   `accounts.settings.notification_channels`, and per tenant in `tenants.notification_channels`).
 - The number used is the tenant's `whatsapp_phone`, else their `phone` (E.164, e.g. `+254712345678`).
@@ -127,6 +182,9 @@ The reason is stored in `notification_deliveries.error`, e.g. `WhatsApp error 13
 | `WHATSAPP_API_VERSION` | `v23.0` | Graph API version — use the latest your Meta app shows |
 | `WHATSAPP_BILL_TEMPLATE` | `rentflow_bill_issued` | Default template for new connections |
 | `WHATSAPP_BILL_TEMPLATE_LANGUAGE` | `en_US` | |
+| `WHATSAPP_INVITATION_TEMPLATE` | `rentflow_tenant_invitation` | Default invitation template |
+| `WHATSAPP_RECEIPT_TEMPLATE` | `rentflow_payment_receipt` | Default receipt template |
+| `TENANT_APP_ANDROID_URL`, `TENANT_APP_IOS_URL` | empty (portal URL) | App links in invitations (email + WhatsApp) |
 | `WHATSAPP_TIMEOUT` | `20` | Seconds to wait for Meta |
 
 Per-landlord credentials are in the `whatsapp_connections` table (token and app secret encrypted with
@@ -138,6 +196,9 @@ Per-landlord credentials are in the `whatsapp_connections` table (token and app 
 |---|---|
 | `app/Services/WhatsApp/WhatsAppClient.php` | Graph API calls: check number, upload media, send template |
 | `app/Services/WhatsApp/WhatsAppBillSender.php` | Builds the bill message (PDF + 7 variables) |
+| `app/Services/WhatsApp/WhatsAppReceiptSender.php` | Builds the receipt message (PDF + 8 variables) |
+| `app/Services/WhatsApp/WhatsAppInvitationSender.php` | Builds the invitation (4 variables + link button); refuses an expired / used link |
+| `app/Services/Notifications/TenantInvitationNotificationService.php` | Queues the invitation delivery (raw token kept encrypted in `payload` for retries) |
 | `app/Services/WhatsApp/WhatsAppConnectionService.php` | Connect / disconnect a landlord's number |
 | `app/Services/WhatsApp/WhatsAppWebhookService.php` | Verify token, signature, extract statuses |
 | `app/Services/Notifications/NotificationDeliveryService.php` | `applyWhatsAppStatus()` |

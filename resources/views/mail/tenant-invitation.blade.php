@@ -18,6 +18,20 @@ You'll log in with this email address or your national ID, and the password you 
 You'll log in with this email address and the password you choose.
 @endif
 
+@php($android = \App\Support\TenantAppLinks::android())
+@php($ios = \App\Support\TenantAppLinks::ios())
+**Get the app** to keep track of your bills on your phone:
+@if ($android || $ios)
+@if ($android)
+- Android: [{{ $android }}]({{ $android }})
+@endif
+@if ($ios)
+- iPhone: [{{ $ios }}]({{ $ios }})
+@endif
+@else
+open [{{ \App\Support\TenantAppLinks::portal() }}]({{ \App\Support\TenantAppLinks::portal() }}) on your phone and choose "Add to home screen".
+@endif
+
 This link works once and expires in 3 days. If it has expired, ask {{ $account->name }} to send a new one.
 
 Thanks,<br>

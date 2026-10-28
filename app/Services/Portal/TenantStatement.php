@@ -10,6 +10,7 @@ use App\Models\Lease;
 use App\Models\Payment;
 use App\Models\Tenant;
 use App\Services\Ledger\LeaseLedgerService;
+use App\Services\Payments\ReceiptPdf;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -84,6 +85,15 @@ class TenantStatement
     public function payments(Tenant $tenant, int $perPage = 20): LengthAwarePaginator
     {
         return $this->confirmedPayments($tenant)->paginate($perPage);
+    }
+
+    /** @throws ModelNotFoundException not one of this tenant's confirmed payments, or no receipt */
+    public function receipt(Tenant $tenant, int $id): Payment
+    {
+        return $this->confirmedPayments($tenant)
+            ->whereNotNull('receipt_number')
+            ->with(ReceiptPdf::WITH)
+            ->findOrFail($id);
     }
 
     /** @return Builder<Invoice> */

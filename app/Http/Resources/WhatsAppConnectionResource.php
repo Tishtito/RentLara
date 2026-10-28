@@ -23,6 +23,10 @@ class WhatsAppConnectionResource extends JsonResource
             'display_phone_number' => $this->display_phone_number,
             'verified_name' => $this->verified_name,
             'template_name' => $this->template_name,
+            /** The tenant invitation template (yours, or the default rentflow_tenant_invitation). */
+            'invitation_template_name' => $this->invitationTemplate(),
+            /** The payment receipt template (yours, or the default rentflow_payment_receipt). */
+            'receipt_template_name' => $this->receiptTemplate(),
             'template_language' => $this->template_language,
             'verified_at' => $this->verified_at,
             /** Paste into Meta: WhatsApp → Configuration → Webhook → Callback URL. */

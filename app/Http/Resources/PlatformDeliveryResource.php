@@ -14,7 +14,7 @@ class PlatformDeliveryResource extends JsonResource
             'id' => $this->id,
             'account' => $this->account ? ['id' => $this->account->id, 'name' => $this->account->name] : null,
             'tenant' => $this->tenant ? trim($this->tenant->first_name.' '.$this->tenant->last_name) : null,
-            /** bill_issued, payment_receipt, invitation… */
+            /** bill_issued, bill_resent, tenant_invitation… */
             'type' => $this->type,
             'channel' => $this->channel,
             'recipient' => $this->recipient,

@@ -8,6 +8,7 @@ use App\Models\InvoiceItem;
 use App\Models\Lease;
 use App\Models\Meter;
 use App\Models\MeterReading;
+use App\Services\Rates\ChargeRateService;
 use App\Support\Money;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
@@ -21,6 +22,8 @@ use Illuminate\Validation\ValidationException;
  */
 class MeterReadingService
 {
+    public function __construct(private ChargeRateService $rates) {}
+
     public function record(
         Meter $meter,
         CarbonInterface $date,
@@ -149,7 +152,8 @@ class MeterReadingService
      * ONE rule for billing (InvoiceBuilder) and the readings screen, so they can't disagree.
      *
      *  - previous: the reading this lease was last billed on; on a first bill the latest reading on or
-     *    before move-in (the move-in opening reading); otherwise the meter's initial reading.
+     *    before move-in (the move-in opening reading); otherwise the meter's initial reading. After a
+     *    fixed-amount spell, never earlier than the reading on the day metering restarted.
      *  - current: the latest reading on or before $upTo, the billing day (usage is billed up to the
      *    billing day); only "ready" when it is newer than previous.
      *
@@ -168,6 +172,15 @@ class MeterReadingService
             // First bill: the opening reading at move-in, or for a tenant added while already living
             // there, the reading taken the day Rentflow started (onboarded_on).
             : $this->readingOnOrBefore($meter, $lease->onboarded_on ?? $lease->start_date);
+
+        // Billed a fixed amount until metering restarted: usage counts from the reading at the restart.
+        $since = $this->rates->meteredSince($lease->unit, $meter->charge_code, $upTo);
+        if ($since && (! $previous || $previous->reading_date->lt($since))) {
+            $restart = $this->readingOnOrBefore($meter, $since);
+            if ($restart && (! $previous || $restart->reading_date->gt($previous->reading_date))) {
+                $previous = $restart;
+            }
+        }
 
         $current = $this->readingOnOrBefore($meter, CarbonImmutable::parse($upTo));
         $ready = $current !== null

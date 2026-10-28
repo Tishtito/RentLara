@@ -31,6 +31,8 @@ class WhatsAppConnectionService
                 'access_token' => $data->accessToken,
                 'app_secret' => $data->appSecret,
                 'template_name' => $data->templateName ?? $connection->template_name ?? config('whatsapp.bill_template.name'),
+                'invitation_template_name' => $data->invitationTemplateName,
+                'receipt_template_name' => $data->receiptTemplateName,
                 'template_language' => $data->templateLanguage ?? $connection->template_language ?? config('whatsapp.bill_template.language'),
             ], fn ($value) => $value !== null));
 
@@ -76,6 +78,17 @@ class WhatsAppConnectionService
     public function current(): ?WhatsAppConnection
     {
         return WhatsAppConnection::query()->with('account')->first();
+    }
+
+    /**
+     * The current account's active connection, for sending.
+     *
+     * @throws PermanentWhatsAppApiException when WhatsApp isn't connected (no retry would help)
+     */
+    public function activeOrFail(): WhatsAppConnection
+    {
+        return WhatsAppConnection::query()->where('status', 'active')->first()
+            ?? throw new PermanentWhatsAppApiException('WhatsApp is not connected for this landlord.');
     }
 
     public function isActive(): bool

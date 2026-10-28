@@ -38,8 +38,10 @@ class WhatsAppConnectionController extends Controller
      *
      * Saves the landlord's WhatsApp Cloud API credentials from their own Meta app. They're checked
      * with Meta first (422 if Meta rejects them). From then on every new bill is also sent on
-     * WhatsApp, using the approved `rentflow_bill_issued` template (see docs/WHATSAPP.md). Send it
-     * again to update; leave `access_token` / `app_secret` out to keep the stored ones.
+     * WhatsApp, using the approved `rentflow_bill_issued` template, every tenant invitation with
+     * `rentflow_tenant_invitation` and every payment receipt with `rentflow_payment_receipt`
+     * (see docs/WHATSAPP.md). Send it again to update;
+     * leave `access_token` / `app_secret` out to keep the stored ones.
      */
     public function update(StoreWhatsAppConnectionRequest $request): JsonResponse
     {

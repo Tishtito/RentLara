@@ -20,7 +20,7 @@ class Payment extends Model
 
     protected $fillable = [
         'account_id', 'lease_id', 'tenant_id', 'invoice_id', 'amount', 'method', 'reference',
-        'payer_phone', 'paid_at', 'status', 'recorded_by', 'meta', 'notes',
+        'payer_phone', 'paid_at', 'status', 'recorded_by', 'meta', 'notes', 'receipt_number', 'balance_after',
     ];
 
     protected function casts(): array
@@ -29,6 +29,7 @@ class Payment extends Model
             'method' => PaymentMethod::class,
             'status' => PaymentStatus::class,
             'amount' => 'decimal:2',
+            'balance_after' => 'decimal:2',
             'paid_at' => 'datetime',
             'meta' => 'array',
         ];
@@ -62,5 +63,11 @@ class Payment extends Model
     public function isConfirmed(): bool
     {
         return $this->status === PaymentStatus::Confirmed;
+    }
+
+    /** Confirmed payments get a receipt (number + PDF), sent to the tenant. */
+    public function hasReceipt(): bool
+    {
+        return $this->isConfirmed() && $this->receipt_number !== null;
     }
 }
