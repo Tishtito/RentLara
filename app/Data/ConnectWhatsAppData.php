@@ -16,5 +16,7 @@ final readonly class ConnectWhatsAppData
         public ?string $appSecret = null,
         public ?string $templateName = null,
         public ?string $templateLanguage = null,
+        public ?string $invitationTemplateName = null,
+        public ?string $receiptTemplateName = null,
     ) {}
 }

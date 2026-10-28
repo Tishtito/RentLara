@@ -53,10 +53,11 @@ class InvoiceVoidService
                 $invoice->lease->forceFill(['deposit_invoiced_at' => null])->save();
             } else {
                 // Back one month: the bill's billing day (its period start) is due again, and rent counts as
-                // billed only up to the day before it.
+                // billed only up to the day before it — or before its billing-day gap, if it charged one.
+                $gapDays = (int) $invoice->items()->where('charge_code', InvoiceBuilder::RENT_ADJUSTMENT)->value('quantity');
                 $invoice->lease->forceFill([
                     'next_billing_date' => Carbon::parse($invoice->period_start)->toDateString(),
-                    'last_billed_on' => Carbon::parse($invoice->period_start)->subDay()->toDateString(),
+                    'last_billed_on' => Carbon::parse($invoice->period_start)->subDays($gapDays + 1)->toDateString(),
                 ])->save();
             }
 

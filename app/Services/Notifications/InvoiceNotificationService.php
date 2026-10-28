@@ -6,7 +6,6 @@ use App\Enums\NotificationChannel;
 use App\Events\NotificationQueued;
 use App\Models\Invoice;
 use App\Models\NotificationDelivery;
-use App\Services\Tenants\TenantService;
 use App\Services\WhatsApp\WhatsAppConnectionService;
 use Illuminate\Validation\ValidationException;
 
@@ -21,11 +20,8 @@ class InvoiceNotificationService
     /** The same bill sent again by hand (always a new delivery, to the tenant's current contact). */
     public const TYPE_BILL_RESENT = 'bill_resent';
 
-    /** Channels with a working sender. SMS joins this list when its sender exists. */
-    private const SUPPORTED = [NotificationChannel::Email, NotificationChannel::WhatsApp];
-
     public function __construct(
-        private TenantService $tenants,
+        private NotificationChannels $channels,
         private WhatsAppConnectionService $whatsapp,
     ) {}
 
@@ -40,7 +36,7 @@ class InvoiceNotificationService
         $tenant = $invoice->tenant()->firstOrFail();
         $created = [];
 
-        foreach ($this->channelsFor($this->tenants->notificationChannels($tenant)) as $channel) {
+        foreach ($this->channels->for($tenant) as $channel) {
             $exists = NotificationDelivery::query()
                 ->where('notifiable_type', $invoice->getMorphClass())
                 ->where('notifiable_id', $invoice->id)
@@ -52,11 +48,7 @@ class InvoiceNotificationService
                 continue;
             }
 
-            $recipient = match ($channel) {
-                NotificationChannel::Email => $tenant->email,
-                NotificationChannel::Sms => $tenant->routeNotificationForSms(),
-                NotificationChannel::WhatsApp => $tenant->routeNotificationForWhatsapp(),
-            };
+            $recipient = NotificationChannels::recipient($tenant, $channel);
 
             $delivery = NotificationDelivery::create([
                 'account_id' => $invoice->account_id,
@@ -68,10 +60,7 @@ class InvoiceNotificationService
                 'recipient' => $recipient ?? '',
                 // Nothing to send to: record why instead of attempting it.
                 'status' => $recipient ? 'queued' : 'failed',
-                'error' => $recipient ? null : match ($channel) {
-                    NotificationChannel::Email => 'Tenant has no email address.',
-                    default => 'Tenant has no phone number.',
-                },
+                'error' => $recipient ? null : NotificationChannels::missingRecipient($channel),
             ]);
 
             if ($recipient) {
@@ -100,14 +89,14 @@ class InvoiceNotificationService
 
         $tenant = $invoice->tenant()->firstOrFail();
         $wanted = $channels === null
-            ? $this->channelsFor($this->tenants->notificationChannels($tenant))
+            ? $this->channels->for($tenant)
             : array_map(fn (string $c) => NotificationChannel::from($c), array_values(array_unique($channels)));
 
         foreach ($wanted as $channel) {
             if ($channel === NotificationChannel::WhatsApp && ! $this->whatsapp->isActive()) {
                 throw ValidationException::withMessages(['channels' => 'Connect your WhatsApp number first (Settings → WhatsApp).']);
             }
-            if (! in_array($channel, self::SUPPORTED, true)) {
+            if (! in_array($channel, NotificationChannels::SUPPORTED, true)) {
                 throw ValidationException::withMessages(['channels' => "Bills can't be sent by {$channel->value} yet."]);
             }
         }
@@ -141,20 +130,5 @@ class InvoiceNotificationService
 
             return $delivery;
         }, $targets);
-    }
-
-    /**
-     * The tenant's preferred channels that can be sent today. WhatsApp only when the landlord has
-     * connected their own number; otherwise the tenant just gets the email.
-     *
-     * @return list<NotificationChannel>
-     */
-    private function channelsFor(array $preferred): array
-    {
-        return array_values(array_filter(
-            self::SUPPORTED,
-            fn (NotificationChannel $channel) => in_array($channel->value, $preferred, true)
-                && ($channel !== NotificationChannel::WhatsApp || $this->whatsapp->isActive()),
-        ));
     }
 }

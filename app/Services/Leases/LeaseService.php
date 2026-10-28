@@ -6,6 +6,7 @@ use App\Enums\LeaseStatus;
 use App\Enums\UnitStatus;
 use App\Models\Account;
 use App\Models\Lease;
+use App\Models\Unit;
 use App\Services\Billing\BillingCalendar;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
@@ -15,8 +16,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Lease lifecycle and billing dates. Every lease of an account bills on the account's billing day
- * (accounts.billing_day): the monthly bill is due on next_billing_date, then it moves to the next
+ * Lease lifecycle and billing dates. A lease bills on its unit's billing day, else its property's, else the
+ * account's (billingDayForUnit): the monthly bill is due on next_billing_date, then it moves to the next
  * month's billing day. Rules: Services\Billing\BillingCalendar.
  */
 class LeaseService
@@ -103,12 +104,40 @@ class LeaseService
         $lease->save();
     }
 
-    /** The day of the month the lease's landlord bills on (accounts.billing_day, 1–28). */
+    /** The day of the month this lease bills on (1–28): see billingDayForUnit(). */
     public function billingDay(Lease $lease): int
     {
-        return $this->billingDayFor((int) $lease->account_id);
+        return $this->billingDayForUnit($lease->unit()->with('property:id,billing_day')->firstOrFail());
     }
 
+    /** The unit's own billing day, else its property's, else the landlord account's. */
+    public function billingDayForUnit(Unit $unit): int
+    {
+        $property = $unit->relationLoaded('property') ? $unit->property : $unit->property()->first(['id', 'billing_day']);
+
+        return $unit->billing_day ?? $property?->billing_day ?? $this->billingDayFor((int) $unit->account_id);
+    }
+
+    /**
+     * After a billing-day change: each running lease's next bill moves to the first billing day (its own,
+     * resolved again) on or after its current one. last_billed_on stays, so the next bill also charges the
+     * days in between (InvoiceBuilder's gap line).
+     *
+     * @param  iterable<Lease>  $leases
+     */
+    public function reschedule(iterable $leases): void
+    {
+        foreach ($leases as $lease) {
+            if (! in_array($lease->status->value, LeaseStatus::billable(), true) || ! $lease->next_billing_date) {
+                continue;
+            }
+
+            $next = BillingCalendar::nextBillingDateAfter($lease->next_billing_date->copy()->subDay(), $this->billingDay($lease));
+            $lease->forceFill(['next_billing_date' => $next->format('Y-m-d')])->save();
+        }
+    }
+
+    /** The landlord account's billing day (accounts.billing_day, 1–28). */
     public function billingDayFor(int $accountId): int
     {
         $day = Account::query()->whereKey($accountId)->value('billing_day');

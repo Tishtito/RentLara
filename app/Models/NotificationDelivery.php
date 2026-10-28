@@ -17,13 +17,17 @@ class NotificationDelivery extends Model
 
     protected $fillable = [
         'account_id', 'tenant_id', 'notifiable_type', 'notifiable_id', 'type', 'channel', 'recipient',
-        'status', 'provider', 'provider_message_id', 'attempts', 'error', 'sent_at', 'delivered_at',
+        'payload', 'status', 'provider', 'provider_message_id', 'attempts', 'error', 'sent_at', 'delivered_at',
     ];
+
+    protected $hidden = ['payload'];
 
     protected function casts(): array
     {
         return [
             'channel' => NotificationChannel::class,
+            // Extra data the send needs (e.g. the raw invitation token), encrypted. Never exposed.
+            'payload' => 'encrypted:array',
             'attempts' => 'integer',
             'sent_at' => 'datetime',
             'delivered_at' => 'datetime',

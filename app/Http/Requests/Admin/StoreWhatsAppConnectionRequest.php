@@ -44,9 +44,22 @@ class StoreWhatsAppConnectionRequest extends FormRequest
              */
             'template_name' => ['nullable', 'string', 'regex:/^[a-z0-9_]+$/', 'max:100'],
             /**
-             * Template language code (default en).
+             * Name of the approved tenant invitation template (default rentflow_tenant_invitation).
              *
-             * @example en
+             * @example rentflow_tenant_invitation
+             */
+            'invitation_template_name' => ['nullable', 'string', 'regex:/^[a-z0-9_]+$/', 'max:100'],
+            /**
+             * Name of the approved payment receipt template (default rentflow_payment_receipt).
+             *
+             * @example rentflow_payment_receipt
+             */
+            'receipt_template_name' => ['nullable', 'string', 'regex:/^[a-z0-9_]+$/', 'max:100'],
+            /**
+             * Template language code, used by all templates (default en_US). It must match the language the
+             * templates were created in on Meta ("English (US)" = en_US, "English" = en).
+             *
+             * @example en_US
              */
             'template_language' => ['nullable', 'string', 'max:20'],
         ];
@@ -72,6 +85,8 @@ class StoreWhatsAppConnectionRequest extends FormRequest
             appSecret: $this->input('app_secret') ?: null,
             templateName: $this->input('template_name') ?: null,
             templateLanguage: $this->input('template_language') ?: null,
+            invitationTemplateName: $this->input('invitation_template_name') ?: null,
+            receiptTemplateName: $this->input('receipt_template_name') ?: null,
         );
     }
 }

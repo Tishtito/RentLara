@@ -9,4 +9,16 @@ enum PaymentMethod: string
     case Cash = 'cash';
     case Cheque = 'cheque';
     case Other = 'other';
+
+    /** As printed on receipts. */
+    public function label(): string
+    {
+        return match ($this) {
+            self::Mpesa => 'M-Pesa',
+            self::Bank => 'Bank',
+            self::Cash => 'Cash',
+            self::Cheque => 'Cheque',
+            self::Other => 'Other',
+        };
+    }
 }

@@ -27,4 +27,15 @@ return [
         'language' => env('WHATSAPP_BILL_TEMPLATE_LANGUAGE', 'en_US'),
     ],
 
+    // The approved template for tenant invitations ("Set up my login" button + app links).
+    // Uses the connection's template language.
+    'invitation_template' => [
+        'name' => env('WHATSAPP_INVITATION_TEMPLATE', 'rentflow_tenant_invitation'),
+    ],
+
+    // The approved template for payment receipts (receipt PDF as the header document).
+    'receipt_template' => [
+        'name' => env('WHATSAPP_RECEIPT_TEMPLATE', 'rentflow_payment_receipt'),
+    ],
+
 ];

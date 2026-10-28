@@ -15,8 +15,15 @@ class Property extends Model
     use BelongsToAccount, HasFactory, SoftDeletes;
 
     protected $fillable = [
-        'account_id', 'name', 'code', 'address', 'town', 'county', 'caretaker_id', 'status', 'notes',
+        'account_id', 'name', 'code', 'address', 'town', 'county', 'caretaker_id', 'status', 'notes', 'billing_day',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'billing_day' => 'integer', // null = the account's billing day; units can override it
+        ];
+    }
 
     public function units(): HasMany
     {

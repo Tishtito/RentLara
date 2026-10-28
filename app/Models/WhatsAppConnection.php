@@ -19,7 +19,7 @@ class WhatsAppConnection extends Model
     protected $fillable = [
         'account_id', 'phone_number_id', 'business_account_id', 'access_token', 'app_secret',
         'webhook_verify_token', 'display_phone_number', 'verified_name', 'template_name',
-        'template_language', 'status', 'verified_at',
+        'invitation_template_name', 'receipt_template_name', 'template_language', 'status', 'verified_at',
     ];
 
     protected $hidden = ['access_token', 'app_secret'];
@@ -31,6 +31,18 @@ class WhatsAppConnection extends Model
             'app_secret' => 'encrypted',
             'verified_at' => 'datetime',
         ];
+    }
+
+    /** The tenant invitation template: the landlord's own name, else the default. */
+    public function invitationTemplate(): string
+    {
+        return $this->invitation_template_name ?: config('whatsapp.invitation_template.name');
+    }
+
+    /** The payment receipt template: the landlord's own name, else the default. */
+    public function receiptTemplate(): string
+    {
+        return $this->receipt_template_name ?: config('whatsapp.receipt_template.name');
     }
 
     public function isActive(): bool

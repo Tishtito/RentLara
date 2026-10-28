@@ -66,6 +66,39 @@ class BillingCalendarTest extends TestCase
         $this->assertSame('2026-12-04', $end->format('Y-m-d'));
     }
 
+    public static function gaps(): array
+    {
+        // [old billing date, new billing date, monthly rent KES, expected days, expected rent KES]
+        return [
+            'day 5 → 20: 5–19 Dec = 15 days → 7,500' => ['2026-12-05', '2026-12-20', 15000, 15, 7500],
+            'one day' => ['2026-12-05', '2026-12-06', 15000, 1, 500],
+            'day 5 → 4: almost a month, capped at one month' => ['2026-12-05', '2027-01-04', 15000, 30, 15000],
+            'rounded to the shilling: 16,900 × 15/30 = 8,450' => ['2026-12-05', '2026-12-20', 16900, 15, 8450],
+        ];
+    }
+
+    #[DataProvider('gaps')]
+    public function test_gap_rent(string $from, string $until, int $rent, int $days, int $amount): void
+    {
+        $r = BillingCalendar::gapRent($rent * 100, new DateTimeImmutable($from), new DateTimeImmutable($until));
+
+        $this->assertSame($days, $r->days);
+        $this->assertSame($amount * 100, $r->amountCents);
+    }
+
+    public function test_gap_rent_description(): void
+    {
+        $r = BillingCalendar::gapRent(1500000, new DateTimeImmutable('2026-12-05'), new DateTimeImmutable('2026-12-20'));
+
+        $this->assertSame('Rent 5 Dec – 19 Dec (15 of 30 days)', $r->description());
+    }
+
+    public function test_gap_rent_needs_at_least_a_day(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        BillingCalendar::gapRent(1500000, new DateTimeImmutable('2026-12-05'), new DateTimeImmutable('2026-12-05'));
+    }
+
     public function test_billing_day_must_exist_every_month(): void
     {
         $this->expectException(InvalidArgumentException::class);

@@ -4,7 +4,6 @@ namespace App\Services\WhatsApp;
 
 use App\Models\Invoice;
 use App\Models\NotificationDelivery;
-use App\Models\WhatsAppConnection;
 use App\Services\Billing\InvoicePdf;
 use App\Support\Money;
 
@@ -20,13 +19,13 @@ class WhatsAppBillSender
     public function __construct(
         private WhatsAppClient $client,
         private InvoicePdf $pdf,
+        private WhatsAppConnectionService $connections,
     ) {}
 
     /** @return string the WhatsApp message ID */
     public function send(NotificationDelivery $delivery): string
     {
-        $connection = WhatsAppConnection::query()->where('status', 'active')->first()
-            ?? throw new PermanentWhatsAppApiException('WhatsApp is not connected for this landlord.');
+        $connection = $this->connections->activeOrFail();
 
         $invoice = Invoice::query()
             ->with(['items', 'tenant', 'unit.property', 'account'])

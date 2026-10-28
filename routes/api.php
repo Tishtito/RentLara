@@ -114,6 +114,7 @@ Route::middleware(['auth:sanctum', 'actor:user', 'account'])->prefix('admin')->g
     Route::post('tenants/{tenant}/invitation', [TenantController::class, 'invite']);
 
     Route::apiResource('payments', PaymentController::class)->only(['index', 'store']);
+    Route::get('payments/{payment}/receipt', [PaymentController::class, 'receipt']);
     Route::apiResource('invoices', InvoiceController::class)->only(['index', 'show']);
     Route::get('invoices/{invoice}/pdf', [InvoiceController::class, 'pdf']);
     Route::post('invoices/{invoice}/resend', [InvoiceController::class, 'resend']);
@@ -167,6 +168,7 @@ Route::middleware(['auth:tenant,sanctum', 'actor:tenant', 'account'])->prefix('p
     Route::get('invoices/{invoice}', [PortalInvoiceController::class, 'show'])->whereNumber('invoice');
     Route::get('invoices/{invoice}/pdf', [PortalInvoiceController::class, 'pdf'])->whereNumber('invoice');
     Route::get('payments', [PortalPaymentController::class, 'index']);
+    Route::get('payments/{payment}/receipt', [PortalPaymentController::class, 'receipt'])->whereNumber('payment');
 });
 
 // Meta WhatsApp webhooks: one URL per landlord, authenticated by their verify token / app secret.

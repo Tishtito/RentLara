@@ -18,5 +18,12 @@ final readonly class UnitData
         public ?UnitStatus $status = null, // null = keep (new units: vacant)
         public ?string $notes = null,
         public ?int $unitId = null,
+        /** @var list<UnitUtilityData>|null null = leave how utilities are billed unchanged */
+        public ?array $utilities = null,
+        public ?int $createdBy = null,
+        /** 1–28, or null = the property's / account's billing day. */
+        public ?int $billingDay = null,
+        /** false = leave the unit's billing day unchanged (the request didn't send it). */
+        public bool $billingDaySet = false,
     ) {}
 }
