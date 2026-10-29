@@ -59,14 +59,28 @@ class PlatformMessaging
         return $failed->count();
     }
 
-    /** @return array{0: int, 1: int} [accountId, deliveryId] of a failed delivery, or 404 / 422 */
-    public function retryTarget(int $deliveryId): array
+    /**
+     * How many failed messages "resend all" will send, per channel.
+     *
+     * @return list<array{channel: string, count: int, sending: true}>
+     */
+    public function retryableCounts(?int $accountId = null): array
+    {
+        return $this->context->withoutScope(fn () => $this->deliveries->retryable()
+            ->when($accountId, fn ($q) => $q->where('account_id', $accountId))
+            ->groupBy('channel')->selectRaw('channel, COUNT(*) as n')->orderBy('channel')->get())
+            ->map(fn ($r) => ['channel' => $r->channel instanceof \BackedEnum ? $r->channel->value : $r->channel, 'count' => (int) $r->n, 'sending' => true])
+            ->values()->all();
+    }
+
+    /** A failed delivery to resend, or 404 / 422. */
+    public function retryTarget(int $deliveryId): NotificationDelivery
     {
         $delivery = $this->context->withoutScope(fn () => NotificationDelivery::query()->findOrFail($deliveryId));
 
         abort_unless($delivery->status === 'failed', 422, 'Only failed messages can be resent.');
 
-        return [$delivery->account_id, $delivery->id];
+        return $delivery;
     }
 
     /** Each landlord's WhatsApp sender number. Never the token or app secret. */

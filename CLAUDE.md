@@ -187,6 +187,9 @@ rent 20 Oct – 4 Nov (16 of 30 days) 8,000 = **23,000**.
   with lines; last 5 payments), `GET portal/invoices[/{id}[/pdf]]`, `GET portal/payments`. All reads through
   `Services\Portal\TenantStatement`, always `tenant_id` = the logged-in tenant (another tenant's bill → 404); draft/void
   bills and unconfirmed payments are never shown; payments use `TenantPaymentResource` (no landlord notes).
+- **Send alerts:** send actions return `messages` in their 202 (`Services\Notifications\MessagePlan`: per channel `to`, or
+  `sending: false` + `note`; resend-all gives `count`): tenant invitation, move-in, bill resend, payment (receipt), platform
+  retry / retry-failed. The admin app shows them with `MessagesNotice` (`@rentflow/ui`). Tests: `SendAlertsTest`.
 - **CI/CD:** `.github/workflows/dev.yml` (here and in `../frontend`): PRs into `dev` run Pint + tests; a merge into `dev`
   deploys with `deploy/deploy.sh` (secret `DEPLOY_SSH_KEY`, host key in `deploy/known_hosts`; `deploy/README.md`). Server PHP is 8.4
   (`php8.4`; `/usr/bin/php` there is 8.3).

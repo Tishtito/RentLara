@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StorePaymentRequest;
 use App\Http\Resources\PaymentResource;
 use App\Models\Payment;
+use App\Services\Notifications\MessagePlan;
 use App\Services\Payments\PaymentService;
 use App\Services\Payments\ReceiptPdf;
 use Dedoc\Scramble\Attributes\Group;
@@ -40,15 +41,19 @@ class PaymentController extends Controller
      * is applied to the lease's latest bill. The payment is processed before the response, so
      * fetching the invoice afterwards shows its new `amount_paid` and status
      * (`partially_paid` / `paid`). `reference` is required for M-Pesa and bank payments and must be
-     * unique per method, which blocks duplicate M-Pesa confirmations.
+     * unique per method, which blocks duplicate M-Pesa confirmations. The tenant is sent a receipt;
+     * `messages` lists each channel: where it goes (`to`), or why it was skipped (`sending: false`, `note`).
      */
-    public function store(StorePaymentRequest $request): JsonResponse
+    public function store(StorePaymentRequest $request, MessagePlan $plan): JsonResponse
     {
         Gate::authorize('create', [Payment::class, $request->lease()]);
 
         PaymentSubmitted::dispatch($request->toData());
 
-        return response()->json(['message' => 'Payment accepted.'], 202);
+        return response()->json([
+            'message' => 'Payment accepted.',
+            'messages' => $plan->forTenant($request->lease()->tenant()->firstOrFail()),
+        ], 202);
     }
 
     /**
