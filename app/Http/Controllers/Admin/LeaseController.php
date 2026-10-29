@@ -9,6 +9,7 @@ use App\Http\Requests\Admin\EndLeaseRequest;
 use App\Http\Requests\Admin\MoveInRequest;
 use App\Models\Lease;
 use App\Models\Unit;
+use App\Services\Notifications\MessagePlan;
 use Carbon\CarbonImmutable;
 use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Http\JsonResponse;
@@ -22,15 +23,19 @@ class LeaseController extends Controller
      *
      * One step: creates the tenant and their lease (first bill one billing cycle after `start_date`),
      * marks the unit occupied, records an opening reading for every active meter on the move-in date,
-     * and emails the tenant a portal invitation if an email is given. The unit must be vacant or reserved.
+     * and emails the tenant a portal invitation if an email is given (plus WhatsApp when connected).
+     * The unit must be vacant or reserved. `messages` lists where the invitation goes, per channel
+     * (empty without an email).
      */
-    public function moveIn(MoveInRequest $request, Unit $unit): JsonResponse
+    public function moveIn(MoveInRequest $request, Unit $unit, MessagePlan $plan): JsonResponse
     {
         Gate::authorize('create', [Lease::class, $unit]);
 
         MoveInSubmitted::dispatch($request->toData($unit->id));
 
-        return response()->json(['message' => 'Tenant moved in.'], 202);
+        $tenant = $request->input('tenant.email') ? $unit->currentLease()->first()?->tenant()->first() : null;
+
+        return response()->json(['message' => 'Tenant moved in.', 'messages' => $tenant ? $plan->forInvitation($tenant) : []], 202);
     }
 
     /**

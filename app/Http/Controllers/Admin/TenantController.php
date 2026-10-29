@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateTenantRequest;
 use App\Http\Resources\AdminTenantResource;
 use App\Models\Tenant;
+use App\Services\Notifications\MessagePlan;
 use App\Services\Tenants\TenantDirectory;
 use Dedoc\Scramble\Attributes\Group;
 use Dedoc\Scramble\Attributes\QueryParameter;
@@ -63,14 +64,15 @@ class TenantController extends Controller
      * Send the portal invitation again.
      *
      * Emails a new link (valid 3 days); earlier links stop working. Only for tenants with an email who
-     * haven't set up their login yet.
+     * haven't set up their login yet. Also sent on WhatsApp when the landlord's number is connected.
+     * `messages` lists each channel: where it goes (`to`), or why it was skipped (`sending: false`, `note`).
      */
-    public function invite(Request $request, Tenant $tenant): JsonResponse
+    public function invite(Request $request, Tenant $tenant, MessagePlan $plan): JsonResponse
     {
         Gate::authorize('update', $tenant);
 
         TenantInvitationRequested::dispatch($tenant->id, $request->user()->id);
 
-        return response()->json(['message' => 'Invitation sent.'], 202);
+        return response()->json(['message' => 'Invitation sent.', 'messages' => $plan->forInvitation($tenant->refresh())], 202);
     }
 }
