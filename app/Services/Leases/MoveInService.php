@@ -12,6 +12,7 @@ use App\Models\Unit;
 use App\Services\Billing\BillingCalendar;
 use App\Services\Billing\CreateMoveInInvoice;
 use App\Services\Meters\MeterReadingService;
+use App\Services\Rates\ChargeRateService;
 use App\Services\Tenants\TenantInvitationService;
 use App\Services\Tenants\TenantService;
 use Carbon\CarbonImmutable;
@@ -19,8 +20,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Move-in in one step: the tenant, their lease, the unit becomes occupied, every active meter gets its
- * opening reading on the move-in date (so the first monthly bill counts usage from move-in), the
+ * Move-in in one step: the tenant, their lease, the unit becomes occupied, every active meter billed by
+ * usage gets its opening reading on the move-in date (so the first monthly bill counts usage from move-in;
+ * utilities billed a fixed amount need none, but a reading sent for one is still recorded), the
  * move-in bill (deposit + rent up to the first billing day, CreateMoveInInvoice) is issued, and the
  * tenant is invited to the portal by email when they have one.
  */
@@ -32,6 +34,7 @@ class MoveInService
         private MeterReadingService $readings,
         private TenantInvitationService $invitations,
         private CreateMoveInInvoice $moveInInvoice,
+        private ChargeRateService $rates,
     ) {}
 
     /** @throws ValidationException unit not available, missing/invalid opening reading */
@@ -44,8 +47,15 @@ class MoveInService
                 throw ValidationException::withMessages(['unit' => "Unit {$unit->unit_number} is not vacant."]);
             }
 
+            // Already living there: Rentflow starts today, so the opening readings are today's.
+            $readingsDate = $data->existing
+                ? CarbonImmutable::now(Account::query()->whereKey($unit->account_id)->value('timezone') ?: config('app.timezone'))->startOfDay()
+                : $data->startDate;
+
             foreach ($unit->activeMeters as $meter) {
-                if (! isset($data->openingReadings[$meter->id]) || $data->openingReadings[$meter->id] === '') {
+                $rate = $this->rates->resolve($unit, $meter->charge_code, $readingsDate);
+                $metered = ! $rate || $rate->isMetered();
+                if ($metered && (! isset($data->openingReadings[$meter->id]) || $data->openingReadings[$meter->id] === '')) {
                     throw ValidationException::withMessages(["opening_readings.{$meter->id}" => "Enter the {$meter->charge_code} reading on the move-in date."]);
                 }
             }
@@ -67,10 +77,8 @@ class MoveInService
 
             // Already living there: Rentflow starts today. Rent up to the first bill is settled outside
             // Rentflow (what they owe goes in opening_balance) and the deposit is already held.
-            $readingsDate = $data->startDate;
             if ($data->existing) {
-                $readingsDate = CarbonImmutable::now(Account::query()->whereKey($unit->account_id)->value('timezone') ?: config('app.timezone'))->startOfDay();
-                $firstBill = $data->firstBillDate ?? CarbonImmutable::instance(BillingCalendar::nextBillingDateAfter($readingsDate, $this->leases->billingDayFor((int) $unit->account_id)));
+                $firstBill = $data->firstBillDate ?? CarbonImmutable::instance(BillingCalendar::nextBillingDateAfter($readingsDate, $this->leases->billingDayForUnit($unit)));
                 $attributes += [
                     'onboarded_on' => $readingsDate->toDateString(),
                     'next_billing_date' => $firstBill->toDateString(),
@@ -84,6 +92,9 @@ class MoveInService
             $unit->forceFill(['status' => UnitStatus::Occupied])->save();
 
             foreach ($unit->activeMeters as $meter) {
+                if (! isset($data->openingReadings[$meter->id]) || $data->openingReadings[$meter->id] === '') {
+                    continue; // a fixed-amount utility
+                }
                 try {
                     $this->readings->record($meter, $readingsDate, $data->openingReadings[$meter->id], $data->createdBy);
                 } catch (ValidationException $e) {

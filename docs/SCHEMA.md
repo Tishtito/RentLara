@@ -44,7 +44,7 @@ erDiagram
 | `meters` / `meter_readings` | Electricity and water meters per unit and their readings each cycle. |
 | `billing_runs` | Audit log of each billing-job execution per account. |
 | `invoices` / `invoice_items` | The monthly bill and its lines, with readings and rates snapshotted. |
-| `payments` | Money received (M-Pesa, bank, cash) against a lease. |
+| `payments` | Money received (M-Pesa, bank, cash) against a lease. A confirmed payment gets `receipt_number` (`RCT-{year}-000001`, per account) and `balance_after` (the lease balance just after it, frozen for the receipt). |
 | `notification_deliveries` | One row per message per channel (email / SMS / WhatsApp) with delivery status. |
 
 ## How the paper bill maps to the schema
@@ -63,6 +63,14 @@ erDiagram
 
 Rules: `app/Services/Billing/BillingCalendar.php` (decisions #5 and #6 in CLAUDE.md).
 
+**Which day a lease bills on** (`LeaseService::billingDayForUnit`): `units.billing_day` ?? `properties.billing_day` ??
+`accounts.billing_day` (1–28 each; null = inherit). Changing any of them moves each affected running lease's
+`next_billing_date` to the first new billing day on or after it (`LeaseService::reschedule`); a unit or property with its
+own day is not moved by an account (or property) change. `last_billed_on` stays, so that next bill also carries a
+**gap line** (`charge_code = rent_adjustment`, "Rent 5 Nov – 19 Nov (15 of 30 days)", quantity = days) for the days
+between: rent × days ÷ 30, rounded to the shilling, max one month (`BillingCalendar::gapRent`). Voiding such a bill
+rolls `last_billed_on` back over the gap too, so the corrected bill charges it again.
+
 **Move-in bill** (`CreateMoveInInvoice`, made with the lease by `MoveInService`, `invoices.type = move_in`):
 deposit (once, `leases.deposit_invoiced_at`) + rent × days(move-in → next billing day) ÷ 30, rounded to the shilling,
 max one month (moving in on the billing day = a full month). Due on move-in day. Sets `next_billing_date` = first billing day.
@@ -72,17 +80,26 @@ max one month (moving in on the billing day = a full month). Due on move-in day.
 2. Leases where `status IN ('active','notice') AND next_billing_date <= today`.
 3. For each lease (in a DB transaction), `InvoiceBuilder`:
    - Period = `next_billing_date` → day before the following billing day (rent in advance, e.g. 5 Nov – 4 Dec).
-   - **Rent** line from `leases.monthly_rent` ("Rent 5 Nov – 4 Dec").
+   - **Rent** line from `leases.monthly_rent` ("Rent 5 Nov – 4 Dec"); plus a `rent_adjustment` gap line when
+     `last_billed_on + 1 day` is before the period start (after a billing-day change, see above).
    - **Metered** lines: latest reading on or before the billing day vs the last billed reading (or the move-in reading,
      or `initial_reading`); rate = the `charge_rates` row effective on the billing day (unit override first). A missing
      reading skips the lease and logs it in `billing_runs.errors`; the next daily run retries it.
    - **Fixed** lines: every other effective fixed `charge_rates` row (garbage, security…) for the coming month.
+   - **Per-unit utility billing:** a unit can pay a fixed monthly amount for a metered utility instead of the meter
+     (unit form, `utilities`): a fixed unit override of that `charge_code`. Switching applies from the unit's next bill
+     (today if vacant). Because fixed bills the coming month and metered the past month, the switch-over bill follows
+     `ChargeRateService::forBill()`: metered → fixed bills the last usage AND the first fixed amount; fixed → metered
+     bills neither, and the next bill counts usage from the reading on the day metering restarted
+     (`ChargeRateService::meteredSince()`, used by `MeterReadingService::pendingReading()`). Fixed utilities need no
+     meter, opening reading or monthly reading. A change no bill used and not started yet is discarded (not stacked)
+     when edited again; billed versions never change.
    - `balance_brought_forward` = lease balance (see Payments).
    - `billing_key` = `"{lease}:{period_start}"` (unique, null when void) makes a re-run harmless.
    - `last_billed_on` = period end, `next_billing_date` = next billing day.
 4. `InvoiceIssued` → one `notification_deliveries` row per channel → queued send, retried on failure.
 
-New columns: `accounts.billing_day`, `invoices.type` (move_in | monthly | adjustment), `leases.deposit_invoiced_at`,
+New columns: `accounts.billing_day`, `properties.billing_day` / `units.billing_day` (nullable overrides), `invoices.type` (move_in | monthly | adjustment), `leases.deposit_invoiced_at`,
 `leases.onboarded_on` (tenants already living there when the landlord joined: their first bill counts usage from the
 reading taken that day; no move-in bill).
 

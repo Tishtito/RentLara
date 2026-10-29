@@ -60,6 +60,15 @@ return [
     'portal_url' => env('PORTAL_URL', 'http://localhost:5174'),
 
     /*
+     * Where tenants download the app (store links), shown in invitations. Empty = the portal URL,
+     * which installs as a web app.
+     */
+    'tenant_app' => [
+        'android_url' => env('TENANT_APP_ANDROID_URL'),
+        'ios_url' => env('TENANT_APP_IOS_URL'),
+    ],
+
+    /*
      * Where the React admin portal runs: team invitations and password resets link to {admin_url}/set-password.
      */
     'admin_url' => env('ADMIN_URL', 'http://localhost:5173'),

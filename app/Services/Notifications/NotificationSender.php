@@ -6,9 +6,14 @@ use App\Enums\NotificationChannel;
 use App\Events\NotificationFailed;
 use App\Events\NotificationSent;
 use App\Mail\InvoiceIssuedMail;
+use App\Mail\PaymentReceiptMail;
 use App\Models\Invoice;
 use App\Models\NotificationDelivery;
+use App\Models\Payment;
+use App\Services\Payments\ReceiptPdf;
 use App\Services\WhatsApp\WhatsAppBillSender;
+use App\Services\WhatsApp\WhatsAppInvitationSender;
+use App\Services\WhatsApp\WhatsAppReceiptSender;
 use Illuminate\Mail\Mailable;
 use Illuminate\Support\Facades\Mail;
 use LogicException;
@@ -24,6 +29,8 @@ class NotificationSender
     public function __construct(
         private NotificationDeliveryService $deliveries,
         private WhatsAppBillSender $whatsapp,
+        private WhatsAppInvitationSender $whatsappInvitation,
+        private WhatsAppReceiptSender $whatsappReceipt,
     ) {}
 
     public function send(NotificationDelivery $delivery): void
@@ -69,6 +76,8 @@ class NotificationSender
     {
         return match ($delivery->type) {
             InvoiceNotificationService::TYPE_BILL_ISSUED, InvoiceNotificationService::TYPE_BILL_RESENT => $this->whatsapp->send($delivery),
+            TenantInvitationNotificationService::TYPE_TENANT_INVITATION => $this->whatsappInvitation->send($delivery),
+            PaymentReceiptNotificationService::TYPE_PAYMENT_RECEIPT => $this->whatsappReceipt->send($delivery),
             default => throw new LogicException("No WhatsApp message for notification type {$delivery->type}."),
         };
     }
@@ -80,6 +89,9 @@ class NotificationSender
                 Invoice::query()
                     ->with(['items', 'tenant', 'unit.property', 'account'])
                     ->findOrFail($delivery->notifiable_id),
+            ),
+            PaymentReceiptNotificationService::TYPE_PAYMENT_RECEIPT => new PaymentReceiptMail(
+                Payment::query()->with(ReceiptPdf::WITH)->findOrFail($delivery->notifiable_id),
             ),
             default => throw new LogicException("No email for notification type {$delivery->type}."),
         };

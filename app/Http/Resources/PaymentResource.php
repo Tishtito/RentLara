@@ -17,8 +17,19 @@ class PaymentResource extends JsonResource
             'tenant_id' => $this->tenant_id,
             'invoice_id' => $this->invoice_id,
             'amount' => $this->amount,
+            /**
+             * The lease balance right after this payment (positive = still owed, negative = credit);
+             * null on payments from before receipts.
+             */
+            'balance_after' => $this->balance_after,
             'method' => $this->method,
             'reference' => $this->reference,
+            /**
+             * Null until the payment is confirmed.
+             *
+             * @example RCT-2026-000001
+             */
+            'receipt_number' => $this->receipt_number,
             'payer_phone' => $this->payer_phone,
             'paid_at' => $this->paid_at,
             'status' => $this->status,

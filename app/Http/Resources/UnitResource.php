@@ -23,6 +23,10 @@ class UnitResource extends JsonResource
             'default_deposit' => $this->default_deposit,
             'status' => $this->status,
             'notes' => $this->notes,
+            /** This unit's own billing day (1–28), or null = its property's / the account's. */
+            'billing_day' => $this->billing_day,
+            /** The day it actually bills on: billing_day ?? the property's ?? the account's. */
+            'effective_billing_day' => $this->whenHas('effective_billing_day'),
             /** The tenant living here now (null when vacant). `balance`: positive = owes, negative = credit. */
             'current_lease' => $this->whenLoaded('currentLease', fn () => $this->currentLease ? [
                 'id' => $this->currentLease->id,
@@ -36,6 +40,14 @@ class UnitResource extends JsonResource
                 'balance' => $this->currentLease->getAttribute('balance'),
             ] : null),
             'meters' => MeterResource::collection($this->whenLoaded('activeMeters')),
+            /**
+             * Each metered utility of the property for this unit: `billing_type` metered (by meter) or fixed
+             * (`amount` KES a month, no readings); `metered_rate` is the price per unit when metered; `pending`
+             * is a change waiting for the next bill (`from`), else null.
+             *
+             * @var list<array{charge_code: string, label: string, unit_of_measure: string|null, billing_type: string, amount: string|null, metered_rate: string, pending: array{billing_type: string, amount: string|null, from: string}|null}>
+             */
+            'utilities' => $this->when(array_key_exists('utilities', $this->resource->getAttributes()), fn () => $this->resource->getAttribute('utilities')),
         ];
     }
 }

@@ -18,7 +18,7 @@ class Unit extends Model
 
     protected $fillable = [
         'account_id', 'property_id', 'unit_number', 'type', 'bedrooms', 'floor',
-        'default_rent', 'default_deposit', 'status', 'notes',
+        'default_rent', 'default_deposit', 'status', 'notes', 'billing_day',
     ];
 
     protected function casts(): array
@@ -27,6 +27,7 @@ class Unit extends Model
             'status' => UnitStatus::class,
             'default_rent' => 'decimal:2',
             'default_deposit' => 'decimal:2',
+            'billing_day' => 'integer', // null = the property's / account's billing day
         ];
     }
 

@@ -10,6 +10,7 @@ use App\Http\Resources\InvoiceResource;
 use App\Models\Invoice;
 use App\Services\Billing\InvoiceDirectory;
 use App\Services\Billing\InvoicePdf;
+use App\Services\Notifications\MessagePlan;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -81,9 +82,10 @@ class InvoiceController extends Controller
      * Resend a bill.
      *
      * Sends the bill again by email and/or WhatsApp (default: the tenant's usual channels), to the
-     * tenant's current contact details. Each send shows in the bill's `deliveries`.
+     * tenant's current contact details. Each send shows in the bill's `deliveries`. `messages` lists each
+     * channel: where it goes (`to`), or why it was skipped (`sending: false`, `note`).
      */
-    public function resend(Request $request, Invoice $invoice): JsonResponse
+    public function resend(Request $request, Invoice $invoice, MessagePlan $plan): JsonResponse
     {
         Gate::authorize('manage', $invoice);
         $request->validate([
@@ -94,7 +96,10 @@ class InvoiceController extends Controller
 
         InvoiceResendRequested::dispatch($invoice->id, $request->input('channels'));
 
-        return response()->json(['message' => 'Sending the bill.'], 202);
+        return response()->json([
+            'message' => 'Sending the bill.',
+            'messages' => $plan->forTenant($invoice->tenant()->firstOrFail(), $request->input('channels')),
+        ], 202);
     }
 
     /**

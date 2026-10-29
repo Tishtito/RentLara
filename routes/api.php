@@ -29,7 +29,10 @@ use App\Http\Controllers\Platform\DeliveryController as PlatformDeliveryControll
 use App\Http\Controllers\Platform\OverviewController as PlatformOverviewController;
 use App\Http\Controllers\Platform\RoleTemplateController;
 use App\Http\Controllers\Portal\GoogleLoginController as PortalGoogleLoginController;
+use App\Http\Controllers\Portal\HomeController as PortalHomeController;
 use App\Http\Controllers\Portal\InvitationController;
+use App\Http\Controllers\Portal\InvoiceController as PortalInvoiceController;
+use App\Http\Controllers\Portal\PaymentController as PortalPaymentController;
 use App\Http\Controllers\Portal\SessionController as PortalSessionController;
 use App\Http\Controllers\Portal\TokenController as PortalTokenController;
 use App\Http\Controllers\WhatsAppWebhookController;
@@ -111,6 +114,7 @@ Route::middleware(['auth:sanctum', 'actor:user', 'account'])->prefix('admin')->g
     Route::post('tenants/{tenant}/invitation', [TenantController::class, 'invite']);
 
     Route::apiResource('payments', PaymentController::class)->only(['index', 'store']);
+    Route::get('payments/{payment}/receipt', [PaymentController::class, 'receipt']);
     Route::apiResource('invoices', InvoiceController::class)->only(['index', 'show']);
     Route::get('invoices/{invoice}/pdf', [InvoiceController::class, 'pdf']);
     Route::post('invoices/{invoice}/resend', [InvoiceController::class, 'resend']);
@@ -158,6 +162,13 @@ Route::middleware(['auth:sanctum', 'actor:user', 'super'])->prefix('platform')->
 // Tenant portal: renters (tenants table). Cookie session (web) or API token (apps).
 Route::middleware(['auth:tenant,sanctum', 'actor:tenant', 'account'])->prefix('portal')->group(function () {
     Route::get('/user', [PortalSessionController::class, 'show']);
+
+    Route::get('home', PortalHomeController::class);
+    Route::get('invoices', [PortalInvoiceController::class, 'index']);
+    Route::get('invoices/{invoice}', [PortalInvoiceController::class, 'show'])->whereNumber('invoice');
+    Route::get('invoices/{invoice}/pdf', [PortalInvoiceController::class, 'pdf'])->whereNumber('invoice');
+    Route::get('payments', [PortalPaymentController::class, 'index']);
+    Route::get('payments/{payment}/receipt', [PortalPaymentController::class, 'receipt'])->whereNumber('payment');
 });
 
 // Meta WhatsApp webhooks: one URL per landlord, authenticated by their verify token / app secret.

@@ -7,6 +7,7 @@ use App\Enums\LeaseStatus;
 use App\Models\Account;
 use App\Models\Lease;
 use App\Services\Billing\BillingCalendar;
+use App\Services\Leases\LeaseService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
@@ -14,9 +15,12 @@ use InvalidArgumentException;
 /** Landlord account settings. */
 class AccountSettingsService
 {
+    public function __construct(private LeaseService $leases) {}
+
     /**
      * Billing settings. A new billing day moves each running lease's next bill to the first new billing
-     * day on or after it (bills already issued don't change); due days and the prefix apply to new bills.
+     * day on or after it (bills already issued don't change; that bill also charges the days in between),
+     * except leases whose unit or property has its own day. Due days and the prefix apply to new bills.
      *
      * @throws ValidationException billing day outside 1–28
      */
@@ -41,13 +45,9 @@ class AccountSettingsService
             ])->save();
 
             if ($changed) {
-                $leases = Lease::withoutGlobalScopes()->where('account_id', $account->id)
-                    ->whereIn('status', LeaseStatus::billable())->whereNotNull('next_billing_date')->get();
-                foreach ($leases as $lease) {
-                    $lease->forceFill([
-                        'next_billing_date' => BillingCalendar::nextBillingDateAfter($lease->next_billing_date->copy()->subDay(), $billingDay)->format('Y-m-d'),
-                    ])->save();
-                }
+                // Leases of units / properties with their own billing day keep it.
+                $this->leases->reschedule(Lease::withoutGlobalScopes()->where('account_id', $account->id)
+                    ->whereIn('status', LeaseStatus::billable())->whereNotNull('next_billing_date')->get());
             }
 
             return $account;

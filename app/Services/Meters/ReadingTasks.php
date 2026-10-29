@@ -2,7 +2,6 @@
 
 namespace App\Services\Meters;
 
-use App\Enums\BillingType;
 use App\Enums\LeaseStatus;
 use App\Models\Lease;
 use App\Models\User;
@@ -64,9 +63,13 @@ class ReadingTasks
         $billingDay = $lease->next_billing_date->toImmutable(); // usage is billed up to the billing day
         $meters = [];
 
+        $usage = $this->rates->forBill($lease->unit, $billingDay)['usage']->keyBy('charge_code');
+
         foreach ($lease->unit->activeMeters as $meter) {
-            $rate = $this->rates->resolve($lease->unit, $meter->charge_code, $billingDay);
-            if ($rate && $rate->billing_type !== BillingType::Metered) {
+            // Billed by usage this time (incl. the last usage before switching to a fixed amount), or metered
+            // from this bill on (after a fixed spell this reading is where usage starts). Fixed: no reading.
+            $rate = $usage->get($meter->charge_code) ?? $this->rates->resolve($lease->unit, $meter->charge_code, $billingDay);
+            if ($rate && ! $rate->isMetered()) {
                 continue;
             }
 

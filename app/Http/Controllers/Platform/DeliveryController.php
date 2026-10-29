@@ -6,6 +6,7 @@ use App\Events\Commands\FailedNotificationsRetryRequested;
 use App\Events\Commands\NotificationRetryRequested;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\PlatformDeliveryResource;
+use App\Services\Notifications\MessagePlan;
 use App\Services\Platform\PlatformMessaging;
 use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Http\JsonResponse;
@@ -49,29 +50,35 @@ class DeliveryController extends Controller
     /**
      * Resend a failed message.
      *
-     * Sends it again in the background.
+     * Sends it again in the background. `messages` says which channel and address it goes to.
      */
     public function retry(int $delivery, PlatformMessaging $messaging): JsonResponse
     {
-        [$accountId, $deliveryId] = $messaging->retryTarget($delivery);
+        $target = $messaging->retryTarget($delivery);
 
-        NotificationRetryRequested::dispatch($accountId, $deliveryId);
+        NotificationRetryRequested::dispatch($target->account_id, $target->id);
 
-        return response()->json(['message' => 'Resending.'], 202);
+        return response()->json([
+            'message' => 'Resending.',
+            'messages' => [MessagePlan::sending($target->channel, $target->recipient)],
+        ], 202);
     }
 
     /**
      * Resend all failed messages.
      *
-     * Every failed message that has an address, for one account (`account_id`) or all.
+     * Every failed message that has an address, for one account (`account_id`) or all. `messages`
+     * gives how many go out on each channel (`count`).
      */
-    public function retryFailed(Request $request): JsonResponse
+    public function retryFailed(Request $request, PlatformMessaging $messaging): JsonResponse
     {
         $request->validate(['account_id' => ['nullable', 'integer', 'exists:accounts,id']]);
+        $accountId = $request->integer('account_id') ?: null;
+        $counts = $messaging->retryableCounts($accountId);
 
-        FailedNotificationsRetryRequested::dispatch($request->integer('account_id') ?: null);
+        FailedNotificationsRetryRequested::dispatch($accountId);
 
-        return response()->json(['message' => 'Resending failed messages.'], 202);
+        return response()->json(['message' => 'Resending failed messages.', 'messages' => $counts], 202);
     }
 
     /**

@@ -44,9 +44,11 @@ Design notes: `docs/SCHEMA.md` (tables, ERD, billing logic) and `docs/SETUP.md` 
    edited only by super admins; landlords (`roles.manage`) make their own roles. Policies check `$user->can(Permission::X->value)`;
    property scope = `properties.view_all`, else only properties where `caretaker_id` = them (`Services\Properties\Visibility`).
    Every account keeps an active Owner; nobody changes their own roles or suspends/removes themselves.
-5. **Billing day, not a rolling cycle.** Each account bills on `accounts.billing_day` (1–28, default 5) every month.
+5. **Billing day, not a rolling cycle.** Each lease bills on one day of the month (1–28): its unit's `billing_day`, else its
+   property's, else `accounts.billing_day` (default 5) — `LeaseService::billingDayForUnit()` (per property/unit added 28 Oct 2026).
    Monthly bill = rent + fixed charges for the coming month (billing day → day before the next) + metered usage up to
-   the billing day + arrears.
+   the billing day + arrears. Changing a day moves running leases to the first new day on or after their next bill; that
+   bill also charges the days in between (`rent_adjustment` line, rent × days ÷ 30, `BillingCalendar::gapRent`).
 6. **Move-in bill = deposit + prorated rent**: rent × days(move-in → next billing day) ÷ **30** (always 30), rounded to
    the shilling, max one month; moving in on the billing day = a full month. Made with the lease (`MoveInService` →
    `CreateMoveInInvoice`). Rules live in `app/Services/Billing/BillingCalendar.php` only (mirrored in
@@ -95,6 +97,9 @@ rent 20 Oct – 4 Nov (16 of 30 days) 8,000 = **23,000**.
 - Billing: `App\Jobs\GenerateDueInvoices` (scheduled daily 06:00 Nairobi in `routes/console.php`; one
   `BillingRunRequested` per active account), `billing:run` by hand, and `POST /api/admin/billing-runs` →
   `BillingRunRequested` → queued `BillingService`. Idempotent; skips leases missing readings.
+- **Billing day per property / unit:** `PUT properties/{id}` and `PUT units/{id}` take `billing_day` (1–28 or null = inherit;
+  units: omit = unchanged); resources return `billing_day` + `effective_billing_day`. `LeaseService::reschedule()` moves running
+  leases; `InvoiceBuilder` adds the gap line, `InvoiceVoidService` rolls it back. Tests: `BillingDayOverrideTest`.
 - **Billing day** (`accounts.billing_day`, decision #5; `LeaseService::nextBillingPeriod/advanceCycle`), **move-in bills**
   (`CreateMoveInInvoice`, `invoices.type` = `move_in`, `leases.deposit_invoiced_at` guards the deposit). Voiding a monthly
   bill rolls the lease back to that billing day; voiding a move-in bill frees the deposit but isn't re-made automatically yet.
@@ -121,6 +126,11 @@ rent 20 Oct – 4 Nov (16 of 30 days) 8,000 = **23,000**.
   by `GoogleIdTokenVerifier` (`GOOGLE_CLIENT_IDS`, see `docs/SETUP.md`). Tests fake Google with `FakesGoogleSignIn`.
 - Payments: `POST /api/admin/payments` → `PaymentSubmitted` → `PaymentService` → `PaymentRecorded`
   → `RefreshInvoicePaymentStatus`. Reads: `GET /api/admin/payments`, `GET /api/admin/invoices/{id}`.
+- **Payment receipts:** a confirmed payment gets `receipt_number` (`ReceiptNumberGenerator`, `RCT-{year}-000001` per account)
+  and `balance_after` (frozen) in `PaymentService`; `PaymentRecorded` → queued `QueueReceiptNotifications` →
+  `PaymentReceiptNotificationService` (delivery `payment_receipt`, channels via `NotificationChannels`, shared with bills) →
+  `PaymentReceiptMail` / `WhatsAppReceiptSender` (template `rentflow_payment_receipt`), PDF `ReceiptPdf` (`pdf.receipt`).
+  Downloads: `GET /api/admin/payments/{id}/receipt` (policy `view` + `Visibility`), `GET /api/portal/payments/{id}/receipt`.
 - **Admin API** (all `api/admin`, permission policies + `Services\Properties\Visibility`):
   properties/units/meters (`PropertyService`, `UnitService`, `MeterService`; replacing a meter deactivates the old one),
   tenants (`TenantDirectory` reads, edit, resend invitation), **move-in** `POST units/{unit}/move-in` → `MoveInService`
@@ -133,8 +143,11 @@ rent 20 Oct – 4 Nov (16 of 30 days) 8,000 = **23,000**.
   reading, else the move-in reading (on/before lease start), else the meter's initial reading; so a first bill never charges
   usage from before move-in, and a lease without a newer reading is skipped.
 - **Tenant invitations:** `TenantInvitationService` issues the link → `TenantInvitationIssued` → queued `SendTenantInvitation`
-  → `TenantInvitationMail` (`{PORTAL_URL}/invite/{token}`, 72 h). Portal: `GET|POST /api/portal/invitations/{token}` sets the
-  password and logs in (session, or token with `device_name`).
+  → `TenantInvitationMail` (`{PORTAL_URL}/invite/{token}`, 72 h), and queued `QueueTenantInvitationWhatsApp` →
+  `TenantInvitationNotificationService` → delivery `tenant_invitation` → `WhatsAppInvitationSender` (template
+  `rentflow_tenant_invitation`, link button; raw token encrypted in `notification_deliveries.payload`; a used/expired link is
+  never sent). App links: `TENANT_APP_ANDROID_URL|IOS_URL` (`App\Support\TenantAppLinks`). Email is still required to invite.
+  Portal: `GET|POST /api/portal/invitations/{token}` sets the password and logs in (session, or token with `device_name`).
 - **Meter readings & setup:** `GET readings?days=0..31|all&property_id&search` (`ReadingTasks`, any time, not just 7 days),
   `POST readings` with `reading_date` (same meter + same day = correction unless billed), `GET meters/{id}/readings`
   (history + which bill used each) and `PUT meter-readings/{id}` (`MeterReadingService::correct`, never a billed reading).
@@ -142,6 +155,11 @@ rent 20 Oct – 4 Nov (16 of 30 days) 8,000 = **23,000**.
   errors `meters.N.*`). **Existing tenants** (landlord joining Rentflow): move-in with `lease.existing` → no move-in bill,
   deposit marked held, opening readings dated today, `leases.onboarded_on` = today (first bill counts usage from that reading),
   first bill = `lease.first_bill_date` ?? next billing day. Getting-started checklist: `GET setup` (`AccountSetupProgress`).
+- **Fixed or metered utilities per unit:** `POST|PUT units` take `utilities: [{charge_code, billing_type, amount}]` (a property
+  metered charge → by meter or a fixed KES amount a month; `ChargeRateService::setUnitBilling`, a fixed unit override,
+  from the unit's next bill / today if vacant). `GET properties/{id}/units` returns `utilities` (with `pending`). Switch-over
+  bills: `ChargeRateService::forBill()` (see `docs/SCHEMA.md`). Fixed utilities need no meter or readings (move-in,
+  readings screen, meter setup `fixed`). Tests: `UnitUtilityBillingTest`.
 - **Bills (admin):** `GET invoices` (`InvoiceDirectory`: search, `status=unpaid|…`, `property_id`, `month`, `meta.summary`
   totals; scoped by `Visibility`), `GET invoices/{id}` (+ `deliveries`, void info), `GET invoices/{id}/pdf` (`InvoicePdf`),
   `POST invoices/{id}/resend` (`InvoiceNotificationService::resend`, new `bill_resent` deliveries), `POST invoices/{id}/void`
@@ -165,14 +183,24 @@ rent 20 Oct – 4 Nov (16 of 30 days) 8,000 = **23,000**.
   registered in `AppServiceProvider`) records every ACCEPTED intent (it runs after the event's own listener, so a 422 isn't
   logged) with actor, account, `via_platform`, subject and the payload with any `password|token|secret` key redacted;
   `RecordAuthEntry` logs logins/logouts/app tokens. New intents get a readable summary in `AuditLogService::SUMMARIES`.
+- **Tenant portal (after login):** `GET portal/home` (each current lease, or the last after moving out: balance, latest bill
+  with lines; last 5 payments), `GET portal/invoices[/{id}[/pdf]]`, `GET portal/payments`. All reads through
+  `Services\Portal\TenantStatement`, always `tenant_id` = the logged-in tenant (another tenant's bill → 404); draft/void
+  bills and unconfirmed payments are never shown; payments use `TenantPaymentResource` (no landlord notes).
+- **Send alerts:** send actions return `messages` in their 202 (`Services\Notifications\MessagePlan`: per channel `to`, or
+  `sending: false` + `note`; resend-all gives `count`): tenant invitation, move-in, bill resend, payment (receipt), platform
+  retry / retry-failed. The admin app shows them with `MessagesNotice` (`@rentflow/ui`). Tests: `SendAlertsTest`.
+- **CI/CD:** `.github/workflows/dev.yml` (here and in `../frontend`): PRs into `dev` run Pint + tests; a merge into `dev`
+  deploys with `deploy/deploy.sh` (secret `DEPLOY_SSH_KEY`, host key in `deploy/known_hosts`; `deploy/README.md`). Server PHP is 8.4
+  (`php8.4`; `/usr/bin/php` there is 8.3).
 
 ## Next steps (in order)
 
-1. **More notifications** — SMS (Africa's Talking) sender; payment receipts (`PaymentRecorded`); tenant invitations
-   by SMS/WhatsApp too (email is done).
+1. **More notifications** — SMS (Africa's Talking) sender; bills, receipts and tenant invitations by SMS
+   (email + WhatsApp are done).
 2. **Admin API gaps** — bills list + void, reading photos.
 3. **SPA auth extras** — tenant password reset (admin reset is done).
-4. **Tenant portal API** — bills, payments (login with landlord choice and accepting invitations are done).
+4. **Tenant portal extras** — tenant password reset / change password, profile edit (bills, payments and home are done).
 5. **M-Pesa** — STK push / C2B callbacks dispatching `PaymentSubmitted`.
 6. Frontend screens for each new API (`../frontend`, designed screens show "Coming soon" until wired).
 

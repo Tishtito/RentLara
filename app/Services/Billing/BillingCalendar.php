@@ -9,7 +9,8 @@ use InvalidArgumentException;
 /**
  * Billing dates and move-in proration (confirmed rules, 16 Oct 2026):
  *
- *  - Each landlord account bills on ONE day of the month (accounts.billing_day, 1–28, default 5).
+ *  - Each lease bills on ONE day of the month: its unit's billing_day, else its property's, else the
+ *    landlord account's (accounts.billing_day, default 5) — LeaseService::billingDayForUnit().
  *    Days 29–31 are not allowed so the date exists in every month, February included.
  *  - The monthly bill on that day charges rent and fixed charges for the coming month
  *    (billing date → day before the next billing date) plus metered usage up to the billing date.
@@ -18,6 +19,9 @@ use InvalidArgumentException;
  *        prorated rent = monthly rent × days ÷ 30      (always 30, whatever the month)
  *    rounded to the nearest shilling and never more than one month's rent.
  *    Moving in ON the billing day = a full month's rent.
+ *  - When a let unit's billing day changes, its next bill moves to the first new billing day on or after
+ *    the old one, and that bill also charges the days in between (gapRent: same ÷ 30 rule), so no day is
+ *    free or billed twice.
  *
  * Pure date maths (no Laravel, no Carbon dependency) so it is easy to unit-test.
  * Carbon instances can be passed in; results are DateTimeImmutable at midnight.
@@ -104,10 +108,33 @@ final class BillingCalendar
         }
 
         $days = self::daysBetween($start, $nextBilling);
-        $shillings = (int) round(($monthlyRentCents / 100) * $days / self::PRORATION_DAYS);
-        $amount = min($monthlyRentCents, $shillings * 100);
 
-        return new MoveInRent($start, $periodEnd, $days, $amount, $monthlyRentCents, false, $nextBilling);
+        return new MoveInRent($start, $periodEnd, $days, self::prorate($monthlyRentCents, $days), $monthlyRentCents, false, $nextBilling);
+    }
+
+    /**
+     * Rent for the days left between two billing schedules after a billing-day change: from $from
+     * (inclusive, the old billing date) to $until (exclusive, the new one). 5 Dec → 20 Dec = 15 days.
+     */
+    public static function gapRent(int $monthlyRentCents, DateTimeInterface $from, DateTimeInterface $until): MoveInRent
+    {
+        $start = self::day($from);
+        $end = self::day($until);
+        $days = self::daysBetween($start, $end);
+
+        if ($days <= 0) {
+            throw new InvalidArgumentException('A rent gap must be at least one day long.');
+        }
+
+        return new MoveInRent($start, $end->modify('-1 day'), $days, self::prorate($monthlyRentCents, $days), $monthlyRentCents, false, $end);
+    }
+
+    /** rent × days ÷ 30, rounded to the shilling, never more than one month. */
+    private static function prorate(int $monthlyRentCents, int $days): int
+    {
+        $shillings = (int) round(($monthlyRentCents / 100) * $days / self::PRORATION_DAYS);
+
+        return min($monthlyRentCents, $shillings * 100);
     }
 
     private static function day(DateTimeInterface $date): DateTimeImmutable

@@ -82,6 +82,7 @@ class MeterService
 
     /**
      * Meter setup grid for a property: every unit × each metered charge, with the active meter if fitted.
+     * `fixed` lists the charges a unit pays a fixed amount for: no meter needed (not counted in `missing`).
      *
      * @return array{charges: list<array{charge_code: string, label: string, unit_of_measure: ?string}>, units: list<array<string, mixed>>, missing: int}
      */
@@ -91,19 +92,24 @@ class MeterService
             ->where('billing_type', BillingType::Metered)->whereNull('effective_to')
             ->orderBy('charge_code')->get(['charge_code', 'label', 'unit_of_measure']);
         $units = Unit::query()->where('property_id', $property->id)->with('activeMeters')->orderBy('unit_number')->get();
+        // Utilities a unit pays a fixed amount for (now or from its next bill) need no meter.
+        $fixed = ChargeRate::query()->where('property_id', $property->id)->whereNotNull('unit_id')
+            ->where('billing_type', BillingType::Fixed)->whereNull('effective_to')
+            ->get(['unit_id', 'charge_code'])->groupBy('unit_id')->map(fn ($rows) => $rows->pluck('charge_code')->unique()->values()->all());
 
         $missing = 0;
-        $rows = $units->map(function (Unit $unit) use ($charges, &$missing) {
+        $rows = $units->map(function (Unit $unit) use ($charges, $fixed, &$missing) {
             $meters = [];
+            $unitFixed = $fixed->get($unit->id, []);
             foreach ($charges as $charge) {
                 $meter = $unit->activeMeters->firstWhere('charge_code', $charge->charge_code);
-                $missing += $meter ? 0 : 1;
+                $missing += $meter || in_array($charge->charge_code, $unitFixed, true) ? 0 : 1;
                 $meters[$charge->charge_code] = $meter ? [
                     'id' => $meter->id, 'meter_number' => $meter->meter_number, 'initial_reading' => $meter->initial_reading,
                 ] : null;
             }
 
-            return ['unit_id' => $unit->id, 'unit_number' => $unit->unit_number, 'status' => $unit->status, 'meters' => $meters];
+            return ['unit_id' => $unit->id, 'unit_number' => $unit->unit_number, 'status' => $unit->status, 'meters' => $meters, 'fixed' => array_values(array_intersect($unitFixed, $charges->pluck('charge_code')->all()))];
         })->values()->all();
 
         return [
