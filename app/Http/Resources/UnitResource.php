@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\Unit;
+use App\Support\CurrentAccount;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -36,6 +37,8 @@ class UnitResource extends JsonResource
                 'start_date' => $this->currentLease->start_date?->toDateString(),
                 'monthly_rent' => $this->currentLease->monthly_rent,
                 'next_billing_date' => $this->currentLease->next_billing_date?->toDateString(),
+                /** A monthly bill is due and not made yet (skipped by the billing run): "Bill now" makes it. */
+                'bill_due' => $this->currentLease->isBillDue(app(CurrentAccount::class)->today($this->currentLease->account_id)),
                 'status' => $this->currentLease->status,
                 'balance' => $this->currentLease->getAttribute('balance'),
             ] : null),

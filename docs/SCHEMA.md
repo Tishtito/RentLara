@@ -32,7 +32,7 @@ erDiagram
 | Table | Purpose |
 |---|---|
 | `accounts` | One landlord business — the multi-tenancy boundary. Holds cycle length (30 days by default), due-days, currency, channel settings. |
-| `invoices` (void) | `voided_at`, `voided_by`, `void_reason`; `billing_key` = `"{lease_id}:{period_start}"` is unique for live bills (null when void), so a voided period can be billed again. |
+| `invoices` (void) | `voided_at`, `voided_by`, `void_reason`; `billing_key` = `"{lease_id}:{period_start}"` is unique for live bills (null when void), so a voided period can be billed again. `replaces_invoice_id` → the void bill a re-bill (`InvoiceRebillService`) replaced. |
 | `users` | Admin portal logins. `role` = super_admin (no account) / staff; `status` = active / invited / suspended. |
 | `roles`, `permissions`, `model_has_roles`, `role_has_permissions` | Spatie. Roles with `account_id` NULL are built-in templates; others belong to one account. `model_has_roles.account_id` = the account the role applies in. |
 | `properties` | Buildings/plots a landlord owns. |
@@ -41,6 +41,7 @@ erDiagram
 | `tenants` | Tenant portal logins: email **or** national ID + password. Password is null until the invitation is accepted. |
 | `tenant_auth_tokens` | Hashed one-time links for invitations and password resets. |
 | `leases` | Tenant ↔ unit occupancy. **Rent per occupied house** lives here (`monthly_rent`), as does `next_billing_date`. |
+| `lease_rent_changes` | History of rent changes (`old_rent`, `new_rent`, `reason`, `changed_by`), written by `LeaseService::changeRent`. `leases.monthly_rent` is the current rent; old bills keep theirs (items snapshot it). |
 | `meters` / `meter_readings` | Electricity and water meters per unit and their readings each cycle. |
 | `billing_runs` | Audit log of each billing-job execution per account. |
 | `invoices` / `invoice_items` | The monthly bill and its lines, with readings and rates snapshotted. |
@@ -89,7 +90,7 @@ max one month (moving in on the billing day = a full month). Due on move-in day.
    - **Per-unit utility billing:** a unit can pay a fixed monthly amount for a metered utility instead of the meter
      (unit form, `utilities`): a fixed unit override of that `charge_code`. Switching applies from the unit's next bill
      (today if vacant). Because fixed bills the coming month and metered the past month, the switch-over bill follows
-     `ChargeRateService::forBill()`: metered → fixed bills the last usage AND the first fixed amount; fixed → metered
+     `ChargeRateService::forBill()`: metered → fixed bills the last usage (only if a reading was taken by the billing day; without one the line is left out and the readings screen marks that meter optional) AND the first fixed amount; fixed → metered
      bills neither, and the next bill counts usage from the reading on the day metering restarted
      (`ChargeRateService::meteredSince()`, used by `MeterReadingService::pendingReading()`). Fixed utilities need no
      meter, opening reading or monthly reading. A change no bill used and not started yet is discarded (not stacked)

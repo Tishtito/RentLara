@@ -58,6 +58,16 @@ class MessagePlan
         return [$this->line($tenant, NotificationChannel::Email), $whatsapp];
     }
 
+    /**
+     * Tenant password reset links: by email only (WhatsApp has no reset template yet).
+     *
+     * @return list<array{channel: string, to: ?string, sending: bool, note: ?string}>
+     */
+    public function forPasswordReset(Tenant $tenant): array
+    {
+        return [$this->line($tenant, NotificationChannel::Email)];
+    }
+
     /** One planned delivery (an existing delivery being resent, e.g. on the platform screen). */
     public static function sending(NotificationChannel|string $channel, ?string $to): array
     {

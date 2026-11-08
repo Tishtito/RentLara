@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\Account;
+use Carbon\CarbonImmutable;
 use Closure;
 
 /**
@@ -23,6 +24,9 @@ class CurrentAccount
 
     private bool $bypass = false;
 
+    /** @var array<int, string> account id → timezone, looked up once per request */
+    private array $timezones = [];
+
     public function set(Account|int|null $account): void
     {
         $this->id = $account instanceof Account ? $account->getKey() : $account;
@@ -31,6 +35,16 @@ class CurrentAccount
     public function id(): ?int
     {
         return $this->id;
+    }
+
+    /** Today (start of day) in an account's timezone: the current account's unless one is given. */
+    public function today(?int $accountId = null): CarbonImmutable
+    {
+        $accountId ??= $this->id;
+        $timezone = $accountId === null ? config('app.timezone')
+            : ($this->timezones[$accountId] ??= (Account::query()->whereKey($accountId)->value('timezone') ?: config('app.timezone')));
+
+        return CarbonImmutable::now($timezone)->startOfDay();
     }
 
     public function has(): bool

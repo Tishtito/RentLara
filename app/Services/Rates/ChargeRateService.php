@@ -117,10 +117,11 @@ class ChargeRateService
     /**
      * The charges a monthly bill on $billingDay carries. Fixed lines bill the COMING month, metered lines
      * the PAST month's usage, so when a unit switches between the two on a billing day:
-     *   metered → fixed: that bill has the last usage AND the first fixed amount;
+     *   metered → fixed: that bill has the last usage (only if a reading was taken by the billing day: `final`
+     *                    lists these codes, InvoiceBuilder leaves the line out without one) AND the first fixed amount;
      *   fixed → metered: that bill has neither (the last fixed amount covered the month), usage starts next bill.
      *
-     * @return array{usage: Collection<int, ChargeRate>, fixed: Collection<int, ChargeRate>}
+     * @return array{usage: Collection<int, ChargeRate>, fixed: Collection<int, ChargeRate>, final: list<string>}
      */
     public function forBill(Unit $unit, CarbonInterface $billingDay): array
     {
@@ -128,16 +129,22 @@ class ChargeRateService
         $before = $this->allFor($unit, CarbonImmutable::parse($billingDay->toDateString())->subDay())->keyBy('charge_code');
 
         $usage = new Collection;
+        $final = [];
         foreach ($now as $code => $rate) {
             if ($rate->isMetered() && ! ($before->has($code) && ! $before[$code]->isMetered())) {
                 $usage->push($rate);
             } elseif (! $rate->isMetered() && $before->has($code) && $before[$code]->isMetered()) {
                 $usage->push($before[$code]); // final usage, at the metered price
+                $final[] = (string) $code;
             }
         }
 
         // Oldest charge first (electricity before water on Kims bills), whichever version is billed.
-        return ['usage' => $usage->sortBy('id')->values(), 'fixed' => $now->reject(fn (ChargeRate $r) => $r->isMetered())->values()];
+        return [
+            'usage' => $usage->sortBy('id')->values(),
+            'fixed' => $now->reject(fn (ChargeRate $r) => $r->isMetered())->values(),
+            'final' => $final,
+        ];
     }
 
     /**

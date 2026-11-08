@@ -8,6 +8,7 @@ use App\Models\Concerns\BelongsToAccount;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -25,7 +26,7 @@ class Invoice extends Model
         'account_id', 'lease_id', 'tenant_id', 'unit_id', 'billing_run_id', 'invoice_number',
         'period_start', 'period_end', 'issue_date', 'due_date', 'current_charges',
         'balance_brought_forward', 'total_due', 'amount_paid', 'status', 'sent_at', 'notes',
-        'billing_key', 'voided_at', 'voided_by', 'void_reason', 'type',
+        'billing_key', 'voided_at', 'voided_by', 'void_reason', 'type', 'replaces_invoice_id',
     ];
 
     protected function casts(): array
@@ -60,6 +61,18 @@ class Invoice extends Model
     public function voidedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'voided_by');
+    }
+
+    /** The void bill this one was re-made from (InvoiceRebillService). */
+    public function replaces(): BelongsTo
+    {
+        return $this->belongsTo(Invoice::class, 'replaces_invoice_id');
+    }
+
+    /** The bill that replaced this one after a re-bill. */
+    public function replacedBy(): HasOne
+    {
+        return $this->hasOne(Invoice::class, 'replaces_invoice_id');
     }
 
     public function tenant(): BelongsTo

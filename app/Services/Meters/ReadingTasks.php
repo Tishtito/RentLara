@@ -63,7 +63,8 @@ class ReadingTasks
         $billingDay = $lease->next_billing_date->toImmutable(); // usage is billed up to the billing day
         $meters = [];
 
-        $usage = $this->rates->forBill($lease->unit, $billingDay)['usage']->keyBy('charge_code');
+        $bill = $this->rates->forBill($lease->unit, $billingDay);
+        $usage = $bill['usage']->keyBy('charge_code');
 
         foreach ($lease->unit->activeMeters as $meter) {
             // Billed by usage this time (incl. the last usage before switching to a fixed amount), or metered
@@ -85,6 +86,8 @@ class ReadingTasks
                 'previous_date' => $pending['previous']?->reading_date?->toDateString(),
                 'current_reading' => $pending['current']?->reading,
                 'current_date' => $pending['current']?->reading_date?->toDateString(),
+                // Last usage before a fixed amount: billed if read, left off the bill if not.
+                'optional' => in_array($meter->charge_code, $bill['final'], true),
             ];
         }
 
@@ -96,7 +99,7 @@ class ReadingTasks
             'tenant_name' => trim("{$lease->tenant->first_name} {$lease->tenant->last_name}"),
             'lease_id' => $lease->id,
             'bills_on' => $lease->next_billing_date->toDateString(),
-            'done' => collect($meters)->every(fn ($m) => $m['current_reading'] !== null),
+            'done' => collect($meters)->every(fn ($m) => $m['optional'] || $m['current_reading'] !== null),
             'meters' => $meters,
         ];
     }

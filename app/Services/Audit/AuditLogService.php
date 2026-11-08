@@ -34,8 +34,11 @@ class AuditLogService
         'charge_rate_change.submitted' => 'Changed a price',
         'landlord_registration.submitted' => 'Signed up a landlord account',
         'lease_end.requested' => 'Moved a tenant out',
+        'lease_bill.requested' => 'Billed a tenant',
         'invoice_resend.requested' => 'Resent a bill',
         'invoice_void.requested' => 'Voided a bill',
+        'invoice_rebill.requested' => 'Re-billed a bill',
+        'lease_rent_change.submitted' => 'Changed a tenant\'s rent',
         'meter_readings.submitted' => 'Recorded meter readings',
         'meter.submitted' => 'Saved a meter',
         'meters.submitted' => 'Fitted meters',
@@ -51,6 +54,9 @@ class AuditLogService
         'staff_status.requested' => 'Changed a team member\'s access',
         'staff.submitted' => 'Saved a team member',
         'tenant_invitation.requested' => 'Sent a tenant invitation',
+        'tenant_password_reset.requested' => 'Asked for a tenant password reset link',
+        'tenant_password_reset_link.requested' => 'Sent a tenant a password reset link',
+        'tenant_password_set.submitted' => 'Set a tenant\'s password',
         'tenant_update.submitted' => 'Edited a tenant',
         'unit.submitted' => 'Saved a unit',
         'whats_app_connection.submitted' => 'Connected WhatsApp',
@@ -63,6 +69,7 @@ class AuditLogService
         'auth.login' => 'Logged in',
         'auth.logout' => 'Logged out',
         'auth.token' => 'Logged in on the app',
+        'auth.password_changed' => 'Changed their password',
     ];
 
     /** Payload keys that identify what the write was about, in order of preference. */

@@ -33,9 +33,10 @@ class CreateMoveInInvoice
         private InvoiceNumberGenerator $numbers,
     ) {}
 
-    public function __invoke(Lease $lease): Invoice
+    /** $issueDate, $dueDate and $replacesId are for a re-made bill (InvoiceRebillService): it keeps the replaced bill's dates. */
+    public function __invoke(Lease $lease, ?CarbonImmutable $issueDate = null, ?CarbonImmutable $dueDate = null, ?int $replacesId = null): Invoice
     {
-        return DB::transaction(function () use ($lease) {
+        return DB::transaction(function () use ($lease, $issueDate, $dueDate, $replacesId) {
             $lease = Lease::query()->whereKey($lease->getKey())->lockForUpdate()->firstOrFail();
 
             $existing = Invoice::query()->where('lease_id', $lease->id)->where('type', InvoiceType::MoveIn)
@@ -46,7 +47,7 @@ class CreateMoveInInvoice
 
             $account = Account::query()->findOrFail($lease->account_id);
             $rent = BillingCalendar::moveInRent(Money::toCents($lease->monthly_rent), $lease->start_date, $this->leases->billingDay($lease));
-            $today = CarbonImmutable::now($account->timezone)->startOfDay();
+            $today = $issueDate ?? CarbonImmutable::now($account->timezone)->startOfDay();
 
             $lines = [];
             if (Money::toCents($lease->deposit_amount) > 0 && ! $lease->deposit_invoiced_at) {
@@ -81,12 +82,13 @@ class CreateMoveInInvoice
                 'period_end' => $rent->periodEnd->format('Y-m-d'),
                 'issue_date' => $today->toDateString(),
                 // Due on move-in day (or today when the lease is entered late).
-                'due_date' => $moveIn->max($today)->toDateString(),
+                'due_date' => ($dueDate ?? $moveIn->max($today))->toDateString(),
                 'current_charges' => Money::fromCents($currentCents),
                 'balance_brought_forward' => $arrears,
                 'total_due' => Money::fromCents($currentCents + Money::toCents($arrears)),
                 'status' => InvoiceStatus::Issued,
                 'billing_key' => "{$lease->id}:{$moveIn->toDateString()}",
+                'replaces_invoice_id' => $replacesId,
             ]);
 
             foreach ($lines as $sort => $line) {

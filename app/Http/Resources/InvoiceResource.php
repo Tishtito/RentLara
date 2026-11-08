@@ -40,6 +40,14 @@ class InvoiceResource extends JsonResource
             'voided_at' => $this->voided_at,
             'void_reason' => $this->void_reason,
             'voided_by' => $this->whenLoaded('voidedBy', fn () => $this->voidedBy?->name),
+            /** The void bill this one was re-made from (re-bill), else null. */
+            'replaces_invoice_id' => $this->replaces_invoice_id,
+            'replaces_invoice_number' => $this->whenLoaded('replaces', fn () => $this->replaces?->invoice_number),
+            /** The bill that replaced this void one (re-bill): only on GET invoices/{id}. */
+            'replaced_by' => $this->whenLoaded('replacedBy', fn () => $this->replacedBy ? [
+                'id' => $this->replacedBy->id,
+                'invoice_number' => $this->replacedBy->invoice_number,
+            ] : null),
             'sent_at' => $this->sent_at,
             'items' => InvoiceItemResource::collection($this->whenLoaded('items')),
             'tenant' => $this->whenLoaded('tenant', fn () => [
