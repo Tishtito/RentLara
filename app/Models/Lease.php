@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\InvoiceStatus;
 use App\Enums\LeaseStatus;
 use App\Models\Concerns\BelongsToAccount;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -45,6 +46,14 @@ class Lease extends Model
         ];
     }
 
+    /** A monthly bill is due and not made yet (e.g. skipped by the billing run for a missing reading). */
+    public function isBillDue(CarbonInterface $today): bool
+    {
+        return in_array($this->status?->value, LeaseStatus::billable(), true)
+            && $this->next_billing_date !== null
+            && $this->next_billing_date->toDateString() <= $today->toDateString();
+    }
+
     public function unit(): BelongsTo
     {
         return $this->belongsTo(Unit::class);
@@ -53,6 +62,11 @@ class Lease extends Model
     public function tenant(): BelongsTo
     {
         return $this->belongsTo(Tenant::class);
+    }
+
+    public function rentChanges(): HasMany
+    {
+        return $this->hasMany(LeaseRentChange::class)->latest('id');
     }
 
     public function invoices(): HasMany

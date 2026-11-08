@@ -35,7 +35,9 @@ CLI   → Command   ────────────────────
 calls the service directly. Today `AuthTokenController` and `Portal\TokenController` (the issued token has to
 be returned), the two `SessionController`s (admin + tenant portal cookie login: the session has to be
 started before the response), the two `GoogleLoginController`s (both) `Portal\InvitationController` (accepting an invitation logs the
-tenant in) and `Admin\PasswordController` (setting a password from an invite/reset link logs the admin in). Webhook controllers
+tenant in), `Portal\PasswordResetController@store` (a tenant password reset logs the tenant in) and the two
+`PasswordController`s (setting a password from an invite/reset link logs the admin in; changing your own password must update the
+logged-in model so the current session keeps the new password hash). Webhook controllers
 (`WhatsAppWebhookController`) are still entry points: they verify the caller, dispatch an intent
 event and answer 200 the way the provider expects.
 They're listed in `ArchitectureTest::SYNC_CONTROLLERS`; keep that list short.

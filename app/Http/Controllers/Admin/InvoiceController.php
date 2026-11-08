@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Enums\NotificationChannel;
+use App\Events\Commands\InvoiceRebillRequested;
 use App\Events\Commands\InvoiceResendRequested;
 use App\Events\Commands\InvoiceVoidRequested;
 use App\Http\Controllers\Controller;
@@ -59,7 +60,7 @@ class InvoiceController extends Controller
     {
         Gate::authorize('view', $invoice);
 
-        return new InvoiceResource($invoice->load(['items', 'tenant', 'unit.property', 'voidedBy:id,name', 'notificationDeliveries' => fn ($q) => $q->latest('id')]));
+        return new InvoiceResource($invoice->load(['items', 'tenant', 'unit.property', 'voidedBy:id,name', 'replaces:id,invoice_number', 'replacedBy:id,invoice_number,replaces_invoice_id', 'notificationDeliveries' => fn ($q) => $q->latest('id')]));
     }
 
     /**
@@ -120,5 +121,35 @@ class InvoiceController extends Controller
         InvoiceVoidRequested::dispatch($invoice->id, (string) $request->input('reason'), $request->user()->id);
 
         return response()->json(['message' => 'Bill voided.'], 202);
+    }
+
+    /**
+     * Re-bill (make a bill again).
+     *
+     * Voids this bill and makes it again for this tenant only, with the lease's current rent, the current
+     * prices and the latest readings (e.g. after changing the rent or fixing a reading). The new bill keeps
+     * the same period, issue date and due date, gets a new number, and is sent to the tenant like any bill.
+     * Same rules as voiding: only the lease's latest bill, and only before any payment is applied. If the
+     * new bill can't be made (e.g. a reading is missing) nothing changes (422). Returns the new bill's
+     * `invoice_id`; `messages` lists where it is sent.
+     */
+    public function rebill(Request $request, Invoice $invoice, MessagePlan $plan): JsonResponse
+    {
+        Gate::authorize('manage', $invoice);
+        $request->validate([
+            /** Why it's being re-made (kept on the void bill and in the activity log). */
+            'reason' => ['required', 'string', 'max:480'],
+        ]);
+
+        InvoiceRebillRequested::dispatch($invoice->id, (string) $request->input('reason'), $request->user()->id);
+
+        $new = Invoice::query()->where('replaces_invoice_id', $invoice->id)->latest('id')->firstOrFail();
+
+        return response()->json([
+            'message' => 'Bill made again.',
+            /** The new bill. */
+            'invoice_id' => $new->id,
+            'messages' => $plan->forTenant($invoice->tenant()->firstOrFail()),
+        ], 202);
     }
 }

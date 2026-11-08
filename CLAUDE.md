@@ -166,6 +166,18 @@ rent 20 Oct – 4 Nov (16 of 30 days) 8,000 = **23,000**.
   (`InvoiceVoidService`: latest bill of the lease, nothing paid; sets void + reason, clears `billing_key`, rolls the lease back
   one cycle so the next run re-bills the period). Resend/void need permission `invoices.manage` (Manager, Accountant, Owner).
   Idempotency is now `invoices.billing_key` (unique, `"{lease}:{period_start}"`, null when void), not unique(lease_id, period_start).
+- **Change rent / re-bill one tenant:** `PUT leases/{id}/rent` (`leases.manage`) → `LeaseRentChangeSubmitted` →
+  `LeaseService::changeRent` (updates `leases.monthly_rent`, history row in `lease_rent_changes`, `LeaseRentChanged`; from the next
+  bill, old bills keep theirs); `GET leases/{id}/rent-changes`. `POST invoices/{id}/rebill` (`invoices.manage`) → `InvoiceRebillService`:
+  void (`InvoiceVoidService` rules: latest bill, nothing paid) + rebuild for that lease only in one transaction (monthly via
+  `InvoiceBuilder`, move-in via `CreateMoveInInvoice`), same period/issue/due dates, new number, `invoices.replaces_invoice_id`;
+  a missing reading → 422 and nothing changes. Admin UI: tenant page "Change rent…" + rent history, bill page "Re-bill…".
+  Tests: `LeaseRentChangeTest`, `InvoiceRebillTest`.
+- **Bill now (one lease):** `POST leases/{id}/bill` (`billing.run` + `Visibility`) → `LeaseBillRequested` → `BillingService::billLeaseNow`:
+  the lease's due monthly bill (skipped by the run), issued today, one period at a time; 422 if nothing due / moved out / reading
+  missing / already billed. `bill_due` (`Lease::isBillDue`, today via `CurrentAccount::today()`) on tenant + unit leases. Switching a
+  unit to fixed with no closing reading drops the last-usage line (`forBill()['final']`). Admin UI: tenant page + units list "Bill now".
+  Tests: `BillLeaseNowTest`, `UnitUtilityBillingTest`.
 - **Team & roles:** `GET permissions`, `GET|POST|PUT|DELETE roles` (`RoleService`), `GET|POST team`, `PUT team/{user}`,
   `PATCH team/{user}/status`, `POST team/{user}/invitation`, `DELETE team/{user}` (`TeamService`). Invites create a user with
   status `invited` → `StaffInvited` → queued `SendStaffInvitation` → `AdminPasswordLinkMail` (`{ADMIN_URL}/set-password`,
@@ -187,6 +199,14 @@ rent 20 Oct – 4 Nov (16 of 30 days) 8,000 = **23,000**.
   with lines; last 5 payments), `GET portal/invoices[/{id}[/pdf]]`, `GET portal/payments`. All reads through
   `Services\Portal\TenantStatement`, always `tenant_id` = the logged-in tenant (another tenant's bill → 404); draft/void
   bills and unconfirmed payments are never shown; payments use `TenantPaymentResource` (no landlord notes).
+- **Passwords:** tenant forgot password `POST portal/auth/forgot-password` (email or national ID → `TenantPasswordResetService::request`,
+  one 1 h link per matching landlord, email only, same 202 either way) → `TenantPasswordResetIssued` → queued `SendTenantPasswordReset`
+  → `TenantPasswordResetMail` (`{PORTAL_URL}/reset-password/{token}`); `GET|POST portal/password-reset/{token}` (sync, logs in like invitations,
+  revokes the tenant's app tokens). Landlord (`tenants.manage`): `PUT tenants/{id}/password` (`TenantService::setPassword`, only tenants
+  with a login) and `POST tenants/{id}/password-reset` (24 h link, `messages` = email). Change your own: `PUT admin/auth/password`
+  (`AdminPasswordService::change`) and `PUT portal/auth/password` (`TenantService::changePassword`); sync, keep the current token/session,
+  revoke the other app tokens, audit `auth.password_changed`. Admin UI: tenant page "Password" panel, `/admin|platform/account`;
+  portal: `/forgot-password`, `/reset-password/:token`, Profile → Change password. Tests: `TenantPasswordResetTest`, `PasswordChangeTest`.
 - **Send alerts:** send actions return `messages` in their 202 (`Services\Notifications\MessagePlan`: per channel `to`, or
   `sending: false` + `note`; resend-all gives `count`): tenant invitation, move-in, bill resend, payment (receipt), platform
   retry / retry-failed. The admin app shows them with `MessagesNotice` (`@rentflow/ui`). Tests: `SendAlertsTest`.
@@ -199,10 +219,9 @@ rent 20 Oct – 4 Nov (16 of 30 days) 8,000 = **23,000**.
 1. **More notifications** — SMS (Africa's Talking) sender; bills, receipts and tenant invitations by SMS
    (email + WhatsApp are done).
 2. **Admin API gaps** — bills list + void, reading photos.
-3. **SPA auth extras** — tenant password reset (admin reset is done).
-4. **Tenant portal extras** — tenant password reset / change password, profile edit (bills, payments and home are done).
-5. **M-Pesa** — STK push / C2B callbacks dispatching `PaymentSubmitted`.
-6. Frontend screens for each new API (`../frontend`, designed screens show "Coming soon" until wired).
+3. **Tenant portal extras** — profile edit (bills, payments, home and passwords are done).
+4. **M-Pesa** — STK push / C2B callbacks dispatching `PaymentSubmitted`.
+5. Frontend screens for each new API (`../frontend`, designed screens show "Coming soon" until wired).
 
 <laravel-boost-guidelines>
 # Laravel Application

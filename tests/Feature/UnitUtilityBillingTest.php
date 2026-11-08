@@ -6,6 +6,7 @@ use App\Models\ChargeRate;
 use App\Models\Invoice;
 use App\Models\Lease;
 use App\Models\Meter;
+use App\Models\MeterReading;
 use App\Models\Property;
 use App\Models\Unit;
 use App\Models\User;
@@ -139,6 +140,27 @@ class UnitUtilityBillingTest extends TestCase
             ['water', '500.00'],
             ['garbage', '250.00'],
         ], $this->billLines($this->latestInvoice()));
+    }
+
+    public function test_switching_to_fixed_without_a_closing_reading_leaves_out_the_last_usage(): void
+    {
+        $this->asKims(fn () => MeterReading::where('meter_id', Meter::where('unit_id', $this->house->id)->where('charge_code', 'water')->value('id'))->delete());
+        $this->setWater($this->house, 'fixed', '500')->assertAccepted(); // from 7-7's next bill, today 5 Nov
+
+        // The readings screen still offers the closing reading, but doesn't wait for it.
+        $task = $this->asKims(fn () => app(ReadingTasks::class)
+            ->due(User::where('email', 'landlord@rentflow.test')->firstOrFail(), null, 7, CarbonImmutable::parse('2026-11-05'))
+            ->firstWhere('unit_id', $this->house->id));
+        $this->assertTrue(collect($task['meters'])->firstWhere('charge_code', 'water')['optional']);
+        $this->assertTrue($task['done']);
+
+        $this->runBilling();
+        $this->assertSame([
+            ['rent', '15000.00'],
+            ['electricity', '2400.00'],
+            ['water', '500.00'],   // first fixed month only
+            ['garbage', '250.00'],
+        ], $this->billLines($this->firstInvoice()));
     }
 
     public function test_switching_back_to_the_meter_starts_usage_from_the_next_bill(): void

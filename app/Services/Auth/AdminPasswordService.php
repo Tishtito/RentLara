@@ -4,7 +4,9 @@ namespace App\Services\Auth;
 
 use App\Mail\AdminPasswordLinkMail;
 use App\Models\Account;
+use App\Models\PersonalAccessToken;
 use App\Models\User;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Validation\ValidationException;
@@ -12,6 +14,7 @@ use Illuminate\Validation\ValidationException;
 /**
  * Admin-portal passwords set from an emailed link ({ADMIN_URL}/set-password?token=…&email=…):
  * team invitations (3-day link, "staff_invites" broker) and "forgot password" (60-minute link).
+ * Also "change password" for a logged-in admin.
  */
 class AdminPasswordService
 {
@@ -68,6 +71,31 @@ class AdminPasswordService
             'email_verified_at' => $user->email_verified_at ?? now(),
         ])->save();
         $broker->deleteToken($user);
+
+        return $user;
+    }
+
+    /**
+     * A logged-in admin changes their own password. Pass the request's user instance so the session
+     * keeps the new password hash (Sanctum's AuthenticateSession). Other app logins are signed out;
+     * `$keepTokenId` (the token making the request) stays. Unused reset links stop working.
+     *
+     * @throws ValidationException wrong current password
+     */
+    public function change(User $user, string $current, string $new, ?int $keepTokenId = null): User
+    {
+        if (! $user->password || ! Hash::check($current, $user->password)) {
+            throw ValidationException::withMessages(['current_password' => 'Your current password is not right.']);
+        }
+
+        $user->forceFill(['password' => $new])->save();
+        Password::broker()->deleteToken($user);
+
+        PersonalAccessToken::query()
+            ->where('tokenable_type', $user->getMorphClass())
+            ->where('tokenable_id', $user->id)
+            ->when($keepTokenId, fn ($q, $id) => $q->whereKeyNot($id))
+            ->delete();
 
         return $user;
     }

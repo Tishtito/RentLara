@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\Lease;
+use App\Support\CurrentAccount;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -46,6 +47,8 @@ class AdminTenantResource extends JsonResource
             'monthly_rent' => $lease->monthly_rent,
             'deposit_amount' => $lease->deposit_amount,
             'next_billing_date' => $lease->next_billing_date?->toDateString(),
+            /** A monthly bill is due and not made yet (skipped by the billing run): "Bill now" makes it. */
+            'bill_due' => $lease->isBillDue(app(CurrentAccount::class)->today($lease->account_id)),
             'status' => $lease->status,
             /** Running balance: positive = owes, negative = credit. */
             'balance' => $lease->getAttribute('balance'),

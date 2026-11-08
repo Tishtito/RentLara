@@ -34,7 +34,8 @@ class ArchitectureTest extends TestCase
         'TokenController.php', // tenant app tokens: the issued token must be returned in the response
         'GoogleLoginController.php', // admin + portal Google login: session / token must exist before the response
         'InvitationController.php', // accepting an invitation logs the tenant in: session / token in the response
-        'PasswordController.php', // set-password logs the admin in: session / token in the response
+        'PasswordController.php', // set-password logs the admin in; change-password must update the logged-in model so this session stays
+        'PasswordResetController.php', // a tenant password reset logs the tenant in: session / token in the response
     ];
 
     private const CONTROLLER_FORBIDDEN = ['DB::', '::create(', '->save(', '->update(', '->delete(', '->forceFill('];

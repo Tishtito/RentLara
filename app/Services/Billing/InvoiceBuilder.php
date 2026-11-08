@@ -40,14 +40,18 @@ class InvoiceBuilder
         private InvoiceNumberGenerator $numbers,
     ) {}
 
-    /** @throws MissingMeterReading before anything is written */
-    public function build(Lease $lease, CarbonImmutable $issueDate, ?BillingRun $run = null): Invoice
+    /**
+     * $dueDate and $replacesId are for a re-made bill (InvoiceRebillService): it keeps the replaced bill's dates.
+     *
+     * @throws MissingMeterReading before anything is written
+     */
+    public function build(Lease $lease, CarbonImmutable $issueDate, ?BillingRun $run = null, ?CarbonImmutable $dueDate = null, ?int $replacesId = null): Invoice
     {
         $account = Account::query()->findOrFail($lease->account_id);
         [$start, $end] = $this->leases->nextBillingPeriod($lease);
         $lines = $this->lines($lease, $start, $end);
 
-        return DB::transaction(function () use ($lease, $account, $issueDate, $run, $start, $end, $lines) {
+        return DB::transaction(function () use ($lease, $account, $issueDate, $run, $start, $end, $lines, $dueDate, $replacesId) {
             $currentCents = array_sum(array_map(fn ($line) => Money::toCents($line['amount']), $lines));
             $arrears = $this->ledger->balance($lease);
 
@@ -61,7 +65,7 @@ class InvoiceBuilder
                 'period_start' => $start->toDateString(),
                 'period_end' => $end->toDateString(),
                 'issue_date' => $issueDate->toDateString(),
-                'due_date' => $issueDate->addDays($account->payment_due_days)->toDateString(),
+                'due_date' => ($dueDate ?? $issueDate->addDays($account->payment_due_days))->toDateString(),
                 'current_charges' => Money::fromCents($currentCents),
                 'balance_brought_forward' => $arrears,
                 'total_due' => Money::fromCents($currentCents + Money::toCents($arrears)),
@@ -69,6 +73,7 @@ class InvoiceBuilder
                 'type' => InvoiceType::Monthly,
                 // One live bill per lease and period (voiding clears it, so the period can be billed again).
                 'billing_key' => "{$lease->id}:{$start->toDateString()}",
+                'replaces_invoice_id' => $replacesId,
             ]);
 
             foreach ($lines as $sort => $line) {
@@ -98,10 +103,14 @@ class InvoiceBuilder
 
         $meters = $lease->unit->activeMeters()->get()->keyBy('charge_code');
         // A unit can bill a utility by meter or as a fixed amount; forBill() handles the switch-over bill.
-        ['usage' => $usage, 'fixed' => $fixed] = $this->rates->forBill($lease->unit, $start);
+        ['usage' => $usage, 'fixed' => $fixed, 'final' => $final] = $this->rates->forBill($lease->unit, $start);
 
         foreach ($usage as $rate) {
-            $lines[] = $this->meteredLine($lease, $rate, $meters->get($rate->charge_code), $start);
+            $meter = $meters->get($rate->charge_code);
+            if (in_array($rate->charge_code, $final, true) && ! $this->hasNewReading($lease, $meter, $start)) {
+                continue; // switched to a fixed amount with no closing reading: no last-usage line
+            }
+            $lines[] = $this->meteredLine($lease, $rate, $meter, $start);
         }
 
         foreach ($fixed as $rate) {
@@ -145,6 +154,12 @@ class InvoiceBuilder
             'rate' => Money::fromCents($rent->dailyRateCents()),
             'amount' => Money::fromCents($rent->amountCents),
         ];
+    }
+
+    /** A meter with a reading after the last billed one, up to the billing day. */
+    private function hasNewReading(Lease $lease, ?Meter $meter, CarbonImmutable $billingDay): bool
+    {
+        return $meter !== null && $this->readings->pendingReading($lease, $meter, $billingDay)['ready'];
     }
 
     /**
