@@ -3,6 +3,7 @@
 namespace App\Services\Tenants;
 
 use App\Events\TenantInvitationIssued;
+use App\Events\TenantPasswordResetIssued;
 use App\Models\Tenant;
 use App\Models\TenantAuthToken;
 use App\Support\CurrentAccount;
@@ -41,11 +42,24 @@ class TenantAuthTokenService
             'expires_at' => now()->addHours($validForHours),
         ]);
 
-        if ($purpose === TenantAuthToken::PURPOSE_INVITATION) {
-            TenantInvitationIssued::dispatch($token, $raw);
-        }
+        match ($purpose) {
+            TenantAuthToken::PURPOSE_INVITATION => TenantInvitationIssued::dispatch($token, $raw),
+            TenantAuthToken::PURPOSE_PASSWORD_RESET => TenantPasswordResetIssued::dispatch($token, $raw),
+            default => null,
+        };
 
         return [$token, $raw];
+    }
+
+    /** Stop every unused link of this purpose working (e.g. after the password was changed another way). */
+    public function expireAll(Tenant $tenant, string $purpose): void
+    {
+        TenantAuthToken::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('purpose', $purpose)
+            ->whereNull('used_at')
+            ->where('expires_at', '>', now())
+            ->update(['expires_at' => now()]);
     }
 
     /** Look up a raw token from a link. Runs before any login, so across all accounts. */

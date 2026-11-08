@@ -5,7 +5,10 @@ namespace App\Http\Controllers\Admin;
 use App\Events\Commands\AdminPasswordResetRequested;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\SetPasswordRequest;
+use App\Http\Requests\Auth\ChangePasswordRequest;
 use App\Http\Resources\AdminUserResource;
+use App\Models\PersonalAccessToken;
+use App\Services\Audit\AuditLogService;
 use App\Services\Auth\AdminAuthService;
 use App\Services\Auth\AdminPasswordService;
 use App\Services\Auth\ApiTokenService;
@@ -14,10 +17,11 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * Passwords set from an emailed link: team invitations and "forgot password".
+ * Passwords set from an emailed link (team invitations and "forgot password"), and "change password".
  *
  * Architecture exception (docs/ARCHITECTURE.md) for set-password: it logs the user in, so the session /
- * token must exist in the response.
+ * token must exist in the response. And for change: the logged-in user model itself must change so this
+ * session / token stays logged in.
  */
 #[Group('Auth', weight: 0)]
 class PasswordController extends Controller
@@ -64,5 +68,27 @@ class PasswordController extends Controller
         $request->session()->regenerate();
 
         return response()->json(['user' => new AdminUserResource($user)]);
+    }
+
+    /**
+     * Change password.
+     *
+     * The logged-in user's own password: needs the current one (422 on `current_password` when wrong). This
+     * device stays logged in; other app logins are signed out and unused reset links stop working.
+     */
+    public function change(ChangePasswordRequest $request, AdminPasswordService $passwords, AuditLogService $audit): JsonResponse
+    {
+        $user = $request->user();
+        $token = $user->currentAccessToken();
+
+        $passwords->change(
+            $user,
+            (string) $request->input('current_password'),
+            (string) $request->input('password'),
+            $token instanceof PersonalAccessToken ? $token->id : null,
+        );
+        $audit->recordAuth('auth.password_changed', $user);
+
+        return response()->json(['message' => 'Password changed.']);
     }
 }

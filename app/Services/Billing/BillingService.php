@@ -3,17 +3,20 @@
 namespace App\Services\Billing;
 
 use App\Data\BillingRunData;
+use App\Enums\LeaseStatus;
 use App\Events\BillingRunCompleted;
 use App\Events\InvoiceIssued;
 use App\Events\LeaseBillingSkipped;
 use App\Models\Account;
 use App\Models\BillingRun;
+use App\Models\Invoice;
 use App\Models\Lease;
 use App\Services\Leases\LeaseService;
 use App\Support\CurrentAccount;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 /**
@@ -62,6 +65,39 @@ class BillingService
 
             return $run;
         });
+    }
+
+    /**
+     * "Bill now" for one lease: makes its due monthly bill today, e.g. after the run skipped it for a missing
+     * reading that's now entered (or the utility switched to a fixed amount). One period at a time: a lease two
+     * months behind gets the older period first, and Bill now again makes the next. Issued today, sent like
+     * every bill.
+     *
+     * @throws ValidationException moved out, nothing due yet, a reading still missing, or already billed
+     */
+    public function billLeaseNow(Lease $lease, ?int $requestedBy = null): Invoice
+    {
+        $lease = Lease::query()->with('unit')->findOrFail($lease->getKey());
+        $today = $this->context->today((int) $lease->account_id);
+
+        if (! in_array($lease->status->value, LeaseStatus::billable(), true)) {
+            throw ValidationException::withMessages(['lease' => 'This tenant has moved out.']);
+        }
+        if (! $lease->isBillDue($today)) {
+            throw ValidationException::withMessages(['lease' => 'The next bill is on '.$lease->next_billing_date->format('j M Y').'. Nothing is due yet.']);
+        }
+
+        try {
+            $invoice = $this->builder->build($lease, $today);
+        } catch (MissingMeterReading $e) {
+            throw ValidationException::withMessages(['lease' => 'Can\'t bill yet: '.$e->getMessage()]);
+        } catch (UniqueConstraintViolationException) {
+            throw ValidationException::withMessages(['lease' => 'Already billed for this period.']);
+        }
+
+        InvoiceIssued::dispatch($invoice);
+
+        return $invoice;
     }
 
     /** Active accounts the daily schedule should bill. */

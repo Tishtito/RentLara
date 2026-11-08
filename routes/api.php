@@ -32,6 +32,8 @@ use App\Http\Controllers\Portal\GoogleLoginController as PortalGoogleLoginContro
 use App\Http\Controllers\Portal\HomeController as PortalHomeController;
 use App\Http\Controllers\Portal\InvitationController;
 use App\Http\Controllers\Portal\InvoiceController as PortalInvoiceController;
+use App\Http\Controllers\Portal\PasswordController as PortalPasswordController;
+use App\Http\Controllers\Portal\PasswordResetController as PortalPasswordResetController;
 use App\Http\Controllers\Portal\PaymentController as PortalPaymentController;
 use App\Http\Controllers\Portal\SessionController as PortalSessionController;
 use App\Http\Controllers\Portal\TokenController as PortalTokenController;
@@ -66,6 +68,11 @@ Route::middleware('throttle:6,1')->group(function () {
 Route::get('portal/invitations/{token}', [InvitationController::class, 'show'])->middleware('throttle:30,1');
 Route::post('portal/invitations/{token}', [InvitationController::class, 'store'])->middleware('throttle:6,1');
 
+// Tenant "forgot password": email a link per landlord, then choose a new password from it (logs in).
+Route::post('portal/auth/forgot-password', [PortalPasswordResetController::class, 'forgot'])->middleware('throttle:3,1');
+Route::get('portal/password-reset/{token}', [PortalPasswordResetController::class, 'show'])->middleware('throttle:30,1');
+Route::post('portal/password-reset/{token}', [PortalPasswordResetController::class, 'store'])->middleware('throttle:6,1');
+
 // Tenant API tokens for the Android/iOS apps (cross-site cookies don't work in their web views).
 Route::post('portal/auth/token', [PortalTokenController::class, 'store'])->middleware('throttle:6,1');
 Route::delete('portal/auth/token', [PortalTokenController::class, 'destroy'])->middleware(['auth:sanctum', 'actor:tenant']);
@@ -73,6 +80,7 @@ Route::delete('portal/auth/token', [PortalTokenController::class, 'destroy'])->m
 // Admin portal: super admins, landlords and caretakers (users table).
 Route::middleware(['auth:sanctum', 'actor:user', 'account'])->prefix('admin')->group(function () {
     Route::get('/user', [AuthTokenController::class, 'show']);
+    Route::put('auth/password', [PasswordController::class, 'change'])->middleware('throttle:6,1');
 
     Route::get('dashboard', DashboardController::class);
     Route::get('caretakers', [PropertyController::class, 'caretakers']);
@@ -110,8 +118,13 @@ Route::middleware(['auth:sanctum', 'actor:user', 'account'])->prefix('admin')->g
 
     Route::post('units/{unit}/move-in', [LeaseController::class, 'moveIn']);
     Route::post('leases/{lease}/end', [LeaseController::class, 'end']);
+    Route::put('leases/{lease}/rent', [LeaseController::class, 'changeRent']);
+    Route::post('leases/{lease}/bill', [LeaseController::class, 'bill']);
+    Route::get('leases/{lease}/rent-changes', [LeaseController::class, 'rentChanges']);
     Route::apiResource('tenants', TenantController::class)->only(['index', 'show', 'update']);
     Route::post('tenants/{tenant}/invitation', [TenantController::class, 'invite']);
+    Route::put('tenants/{tenant}/password', [TenantController::class, 'setPassword']);
+    Route::post('tenants/{tenant}/password-reset', [TenantController::class, 'sendPasswordReset']);
 
     Route::apiResource('payments', PaymentController::class)->only(['index', 'store']);
     Route::get('payments/{payment}/receipt', [PaymentController::class, 'receipt']);
@@ -119,6 +132,7 @@ Route::middleware(['auth:sanctum', 'actor:user', 'account'])->prefix('admin')->g
     Route::get('invoices/{invoice}/pdf', [InvoiceController::class, 'pdf']);
     Route::post('invoices/{invoice}/resend', [InvoiceController::class, 'resend']);
     Route::post('invoices/{invoice}/void', [InvoiceController::class, 'void']);
+    Route::post('invoices/{invoice}/rebill', [InvoiceController::class, 'rebill']);
     Route::apiResource('billing-runs', BillingRunController::class)->only(['index', 'store']);
 
     Route::get('whatsapp', [WhatsAppConnectionController::class, 'show']);
@@ -162,6 +176,7 @@ Route::middleware(['auth:sanctum', 'actor:user', 'super'])->prefix('platform')->
 // Tenant portal: renters (tenants table). Cookie session (web) or API token (apps).
 Route::middleware(['auth:tenant,sanctum', 'actor:tenant', 'account'])->prefix('portal')->group(function () {
     Route::get('/user', [PortalSessionController::class, 'show']);
+    Route::put('auth/password', [PortalPasswordController::class, 'update'])->middleware('throttle:6,1');
 
     Route::get('home', PortalHomeController::class);
     Route::get('invoices', [PortalInvoiceController::class, 'index']);

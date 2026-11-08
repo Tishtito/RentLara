@@ -4,10 +4,12 @@ namespace App\Services\Leases;
 
 use App\Enums\LeaseStatus;
 use App\Enums\UnitStatus;
+use App\Events\LeaseRentChanged;
 use App\Models\Account;
 use App\Models\Lease;
 use App\Models\Unit;
 use App\Services\Billing\BillingCalendar;
+use App\Support\Money;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Collection;
@@ -70,6 +72,43 @@ class LeaseService
 
             return $lease;
         });
+    }
+
+    /**
+     * Change the rent of a running lease. The next bill charges the new rent (including any billing-day gap
+     * line); bills already issued keep theirs — re-bill one (InvoiceRebillService) to correct it.
+     *
+     * @throws ValidationException lease ended, or the rent is the same
+     */
+    public function changeRent(Lease $lease, string $newRent, ?string $reason = null, ?int $changedBy = null): Lease
+    {
+        $change = DB::transaction(function () use ($lease, $newRent, $reason, $changedBy) {
+            $lease = Lease::query()->whereKey($lease->getKey())->lockForUpdate()->firstOrFail();
+
+            if (! in_array($lease->status->value, LeaseStatus::billable(), true)) {
+                throw ValidationException::withMessages(['lease' => 'This lease has ended.']);
+            }
+
+            if (Money::toCents($lease->monthly_rent) === Money::toCents($newRent)) {
+                throw ValidationException::withMessages(['monthly_rent' => 'That is already the rent for this lease.']);
+            }
+
+            $change = $lease->rentChanges()->create([
+                'account_id' => $lease->account_id,
+                'old_rent' => $lease->monthly_rent,
+                'new_rent' => Money::fromCents(Money::toCents($newRent)),
+                'reason' => $reason !== null && trim($reason) !== '' ? trim($reason) : null,
+                'changed_by' => $changedBy,
+            ]);
+
+            $lease->forceFill(['monthly_rent' => $change->new_rent])->save();
+
+            return $change;
+        });
+
+        LeaseRentChanged::dispatch($change);
+
+        return $change->lease;
     }
 
     /** Leases to bill on a date: active or on notice, with their cycle due. */

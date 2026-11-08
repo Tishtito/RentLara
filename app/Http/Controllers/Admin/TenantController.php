@@ -3,8 +3,11 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Events\Commands\TenantInvitationRequested;
+use App\Events\Commands\TenantPasswordResetLinkRequested;
+use App\Events\Commands\TenantPasswordSetSubmitted;
 use App\Events\Commands\TenantUpdateSubmitted;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\SetTenantPasswordRequest;
 use App\Http\Requests\Admin\UpdateTenantRequest;
 use App\Http\Resources\AdminTenantResource;
 use App\Models\Tenant;
@@ -74,5 +77,36 @@ class TenantController extends Controller
         TenantInvitationRequested::dispatch($tenant->id, $request->user()->id);
 
         return response()->json(['message' => 'Invitation sent.', 'messages' => $plan->forInvitation($tenant->refresh())], 202);
+    }
+
+    /**
+     * Set the tenant's password.
+     *
+     * The landlord chooses a new portal password and tells the tenant what it is. Works at once; the
+     * tenant's apps are logged out and any reset links stop working. Only for tenants who have set up
+     * their login (otherwise send the invitation, 422 on `tenant`). Needs `tenants.manage`.
+     */
+    public function setPassword(SetTenantPasswordRequest $request, Tenant $tenant): JsonResponse
+    {
+        Gate::authorize('update', $tenant);
+
+        TenantPasswordSetSubmitted::dispatch($tenant->id, (string) $request->input('password'));
+
+        return response()->json(['message' => 'Password changed. Let the tenant know their new password.'], 202);
+    }
+
+    /**
+     * Email a password reset link.
+     *
+     * The tenant chooses a new password from the link (valid 24 hours; earlier links stop working).
+     * Only for tenants with an email who have set up their login. `messages` shows where it goes.
+     */
+    public function sendPasswordReset(Request $request, Tenant $tenant, MessagePlan $plan): JsonResponse
+    {
+        Gate::authorize('update', $tenant);
+
+        TenantPasswordResetLinkRequested::dispatch($tenant->id, $request->user()->id);
+
+        return response()->json(['message' => 'Password reset link sent.', 'messages' => $plan->forPasswordReset($tenant->refresh())], 202);
     }
 }
