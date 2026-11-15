@@ -41,6 +41,7 @@ erDiagram
 | `tenants` | Tenant portal logins: email **or** national ID + password. Password is null until the invitation is accepted. |
 | `tenant_auth_tokens` | Hashed one-time links for invitations and password resets. |
 | `leases` | Tenant ↔ unit occupancy. **Rent per occupied house** lives here (`monthly_rent`), as does `next_billing_date`. |
+| `lease_charge_exclusions` | A tenant (lease) excused from one charge for bills on billing days `starts_on` … `ends_on` (null = still excused); follows the lease, not the unit. Applied by `ChargeExclusionService::forLeaseBill()`: the first excused bill still has the past month's metered usage if read; after charging again, usage restarts on the following bill. |
 | `lease_rent_changes` | History of rent changes (`old_rent`, `new_rent`, `reason`, `changed_by`), written by `LeaseService::changeRent`. `leases.monthly_rent` is the current rent; old bills keep theirs (items snapshot it). |
 | `meters` / `meter_readings` | Electricity and water meters per unit and their readings each cycle. |
 | `billing_runs` | Audit log of each billing-job execution per account. |

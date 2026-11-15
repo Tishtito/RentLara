@@ -178,6 +178,12 @@ rent 20 Oct – 4 Nov (16 of 30 days) 8,000 = **23,000**.
   missing / already billed. `bill_due` (`Lease::isBillDue`, today via `CurrentAccount::today()`) on tenant + unit leases. Switching a
   unit to fixed with no closing reading drops the last-usage line (`forBill()['final']`). Admin UI: tenant page + units list "Bill now".
   Tests: `BillLeaseNowTest`, `UnitUtilityBillingTest`.
+- **Excuse a tenant from a charge:** `lease_charge_exclusions` (per lease, `starts_on`/`ends_on` = billing days). `GET leases/{id}/charges`,
+  `POST leases/{id}/charge-exclusions` `{charge_code, reason}`, `DELETE leases/{id}/charge-exclusions/{code}` (`rates.manage` + `Visibility`)
+  → `ChargeExclusionService` (from the next bill; removing a spell that never reached a bill deletes it). Billing, readings screen and
+  reading restarts all go through `ChargeExclusionService::forLeaseBill()` (wraps `ChargeRateService::forBill`, same switch-over rules:
+  first excused bill keeps last usage if read, usage restarts the bill after charging again; `MeterReadingService` restart = latest of
+  both `meteredSince`). Admin UI: tenant page "Charges" card. Tests: `ChargeExclusionTest`.
 - **Team & roles:** `GET permissions`, `GET|POST|PUT|DELETE roles` (`RoleService`), `GET|POST team`, `PUT team/{user}`,
   `PATCH team/{user}/status`, `POST team/{user}/invitation`, `DELETE team/{user}` (`TeamService`). Invites create a user with
   status `invited` → `StaffInvited` → queued `SendStaffInvitation` → `AdminPasswordLinkMail` (`{ADMIN_URL}/set-password`,

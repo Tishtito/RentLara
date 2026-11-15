@@ -69,6 +69,11 @@ class Lease extends Model
         return $this->hasMany(LeaseRentChange::class)->latest('id');
     }
 
+    public function chargeExclusions(): HasMany
+    {
+        return $this->hasMany(LeaseChargeExclusion::class);
+    }
+
     public function invoices(): HasMany
     {
         return $this->hasMany(Invoice::class);
