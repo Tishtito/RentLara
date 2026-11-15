@@ -35,6 +35,8 @@ class AuditLogService
         'landlord_registration.submitted' => 'Signed up a landlord account',
         'lease_end.requested' => 'Moved a tenant out',
         'lease_bill.requested' => 'Billed a tenant',
+        'lease_charge_exclusion.submitted' => 'Excused a tenant from a charge',
+        'lease_charge_inclusion.requested' => 'Charged a tenant again',
         'invoice_resend.requested' => 'Resent a bill',
         'invoice_void.requested' => 'Voided a bill',
         'invoice_rebill.requested' => 'Re-billed a bill',

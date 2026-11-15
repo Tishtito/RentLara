@@ -3,16 +3,20 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Events\Commands\LeaseBillRequested;
+use App\Events\Commands\LeaseChargeExclusionSubmitted;
+use App\Events\Commands\LeaseChargeInclusionRequested;
 use App\Events\Commands\LeaseEndRequested;
 use App\Events\Commands\LeaseRentChangeSubmitted;
 use App\Events\Commands\MoveInSubmitted;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ChangeRentRequest;
 use App\Http\Requests\Admin\EndLeaseRequest;
+use App\Http\Requests\Admin\ExcludeChargeRequest;
 use App\Http\Requests\Admin\MoveInRequest;
 use App\Models\Invoice;
 use App\Models\Lease;
 use App\Models\Unit;
+use App\Services\Leases\ChargeExclusionService;
 use App\Services\Notifications\MessagePlan;
 use Carbon\CarbonImmutable;
 use Dedoc\Scramble\Attributes\Group;
@@ -118,5 +122,50 @@ class LeaseController extends Controller
         ]);
 
         return response()->json(['data' => $changes]);
+    }
+
+    /**
+     * Charges for this tenant.
+     *
+     * Each charge of the tenant's house at their next bill (rent not included) and whether they pay it:
+     * `excluded` = excused on the next bill (`excluded_from` = the first bill it applies to), `charged_again_from`
+     * = an excused spell that ends at the next bill. `history` lists every excused spell.
+     */
+    public function charges(Lease $lease, ChargeExclusionService $exclusions): JsonResponse
+    {
+        Gate::authorize('view', $lease);
+
+        return response()->json(['data' => $exclusions->forLease($lease)]);
+    }
+
+    /**
+     * Excuse from a charge.
+     *
+     * The tenant stops paying one of the property's charges (fixed or metered) from their next bill. A metered
+     * charge then needs no readings; that first bill still carries the past month's usage if it was read. It
+     * follows the tenant: the next tenant of the house pays it. To apply it to a bill already made, re-bill it.
+     */
+    public function excludeCharge(ExcludeChargeRequest $request, Lease $lease): JsonResponse
+    {
+        Gate::authorize('manageCharges', $lease);
+
+        LeaseChargeExclusionSubmitted::dispatch($lease->id, (string) $request->input('charge_code'), $request->input('reason'), $request->user()->id);
+
+        return response()->json(['message' => 'Tenant excused from the charge.'], 202);
+    }
+
+    /**
+     * Charge again.
+     *
+     * Ends an excused spell from the tenant's next bill (a spell that hasn't reached a bill yet is simply
+     * removed). Metered usage restarts on the bill after, from the reading at the restart.
+     */
+    public function includeCharge(Request $request, Lease $lease, string $chargeCode): JsonResponse
+    {
+        Gate::authorize('manageCharges', $lease);
+
+        LeaseChargeInclusionRequested::dispatch($lease->id, $chargeCode, $request->user()->id);
+
+        return response()->json(['message' => 'Tenant will be charged again.'], 202);
     }
 }

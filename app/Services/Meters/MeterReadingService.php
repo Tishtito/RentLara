@@ -8,6 +8,7 @@ use App\Models\InvoiceItem;
 use App\Models\Lease;
 use App\Models\Meter;
 use App\Models\MeterReading;
+use App\Services\Leases\ChargeExclusionService;
 use App\Services\Rates\ChargeRateService;
 use App\Support\Money;
 use Carbon\CarbonImmutable;
@@ -22,7 +23,7 @@ use Illuminate\Validation\ValidationException;
  */
 class MeterReadingService
 {
-    public function __construct(private ChargeRateService $rates) {}
+    public function __construct(private ChargeRateService $rates, private ChargeExclusionService $exclusions) {}
 
     public function record(
         Meter $meter,
@@ -173,8 +174,12 @@ class MeterReadingService
             // there, the reading taken the day Rentflow started (onboarded_on).
             : $this->readingOnOrBefore($meter, $lease->onboarded_on ?? $lease->start_date);
 
-        // Billed a fixed amount until metering restarted: usage counts from the reading at the restart.
-        $since = $this->rates->meteredSince($lease->unit, $meter->charge_code, $upTo);
+        // Billed a fixed amount (or the tenant was excused) until metering restarted: usage counts from the
+        // reading at the restart.
+        $since = collect([
+            $this->rates->meteredSince($lease->unit, $meter->charge_code, $upTo),
+            $this->exclusions->meteredSince($lease, $meter->charge_code, $upTo),
+        ])->filter()->max();
         if ($since && (! $previous || $previous->reading_date->lt($since))) {
             $restart = $this->readingOnOrBefore($meter, $since);
             if ($restart && (! $previous || $restart->reading_date->gt($previous->reading_date))) {

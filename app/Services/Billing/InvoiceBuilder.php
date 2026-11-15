@@ -10,6 +10,7 @@ use App\Models\ChargeRate;
 use App\Models\Invoice;
 use App\Models\Lease;
 use App\Models\Meter;
+use App\Services\Leases\ChargeExclusionService;
 use App\Services\Leases\LeaseService;
 use App\Services\Ledger\LeaseLedgerService;
 use App\Services\Meters\MeterReadingService;
@@ -38,6 +39,7 @@ class InvoiceBuilder
         private ChargeRateService $rates,
         private MeterReadingService $readings,
         private InvoiceNumberGenerator $numbers,
+        private ChargeExclusionService $exclusions,
     ) {}
 
     /**
@@ -102,8 +104,9 @@ class InvoiceBuilder
         }
 
         $meters = $lease->unit->activeMeters()->get()->keyBy('charge_code');
-        // A unit can bill a utility by meter or as a fixed amount; forBill() handles the switch-over bill.
-        ['usage' => $usage, 'fixed' => $fixed, 'final' => $final] = $this->rates->forBill($lease->unit, $start);
+        // A unit can bill a utility by meter or as a fixed amount, and a tenant can be excused from a charge;
+        // forLeaseBill() handles both, including the switch-over bills.
+        ['usage' => $usage, 'fixed' => $fixed, 'final' => $final] = $this->exclusions->forLeaseBill($lease, $start);
 
         foreach ($usage as $rate) {
             $meter = $meters->get($rate->charge_code);

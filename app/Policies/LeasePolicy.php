@@ -43,4 +43,10 @@ class LeasePolicy
     {
         return $user->can(Permission::BillingRun->value) && $this->visibility->canSeeProperty($user, $lease->unit?->property);
     }
+
+    /** Excuse the tenant from a charge, or charge them again: same permission as changing prices. */
+    public function manageCharges(User $user, Lease $lease): bool
+    {
+        return $user->can(Permission::RatesManage->value) && $this->visibility->canSeeProperty($user, $lease->unit?->property);
+    }
 }

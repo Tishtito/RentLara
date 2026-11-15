@@ -5,6 +5,7 @@ namespace App\Services\Meters;
 use App\Enums\LeaseStatus;
 use App\Models\Lease;
 use App\Models\User;
+use App\Services\Leases\ChargeExclusionService;
 use App\Services\Properties\Visibility;
 use App\Services\Rates\ChargeRateService;
 use Carbon\CarbonImmutable;
@@ -21,6 +22,7 @@ class ReadingTasks
         private MeterReadingService $readings,
         private ChargeRateService $rates,
         private Visibility $visibility,
+        private ChargeExclusionService $exclusions,
     ) {}
 
     /**
@@ -63,10 +65,14 @@ class ReadingTasks
         $billingDay = $lease->next_billing_date->toImmutable(); // usage is billed up to the billing day
         $meters = [];
 
-        $bill = $this->rates->forBill($lease->unit, $billingDay);
+        $bill = $this->exclusions->forLeaseBill($lease, $billingDay);
         $usage = $bill['usage']->keyBy('charge_code');
 
         foreach ($lease->unit->activeMeters as $meter) {
+            // Excused from this charge, and no last usage to read.
+            if (in_array($meter->charge_code, $bill['excluded'], true) && ! in_array($meter->charge_code, $bill['final'], true)) {
+                continue;
+            }
             // Billed by usage this time (incl. the last usage before switching to a fixed amount), or metered
             // from this bill on (after a fixed spell this reading is where usage starts). Fixed: no reading.
             $rate = $usage->get($meter->charge_code) ?? $this->rates->resolve($lease->unit, $meter->charge_code, $billingDay);

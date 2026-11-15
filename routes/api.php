@@ -120,6 +120,9 @@ Route::middleware(['auth:sanctum', 'actor:user', 'account'])->prefix('admin')->g
     Route::post('leases/{lease}/end', [LeaseController::class, 'end']);
     Route::put('leases/{lease}/rent', [LeaseController::class, 'changeRent']);
     Route::post('leases/{lease}/bill', [LeaseController::class, 'bill']);
+    Route::get('leases/{lease}/charges', [LeaseController::class, 'charges']);
+    Route::post('leases/{lease}/charge-exclusions', [LeaseController::class, 'excludeCharge']);
+    Route::delete('leases/{lease}/charge-exclusions/{chargeCode}', [LeaseController::class, 'includeCharge']);
     Route::get('leases/{lease}/rent-changes', [LeaseController::class, 'rentChanges']);
     Route::apiResource('tenants', TenantController::class)->only(['index', 'show', 'update']);
     Route::post('tenants/{tenant}/invitation', [TenantController::class, 'invite']);
